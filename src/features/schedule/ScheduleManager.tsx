@@ -8,6 +8,8 @@ import { useState } from 'react'
 import type { FixedEvent, FlexibleTask, Priority, ScheduleDefinition } from '../../domain/types'
 import { useAppStore } from '../../store/appStore'
 import { newId, nowLocalIso } from '../../lib/ids'
+import { LoadFields } from './LoadFields'
+import { DEFAULT_LOAD, toLoadProfile, type LoadValue } from './loadValue'
 
 const inputClass =
   'w-full rounded border border-gray-300 px-2 py-1 text-sm dark:border-gray-600 dark:bg-gray-800'
@@ -22,6 +24,7 @@ function FixedEventForm() {
   const [date, setDate] = useState('')
   const [start, setStart] = useState('09:00')
   const [end, setEnd] = useState('10:00')
+  const [load, setLoad] = useState<LoadValue>(DEFAULT_LOAD)
 
   const canSubmit = name.trim() !== '' && date !== '' && start !== '' && end !== '' && start < end
 
@@ -35,9 +38,11 @@ function FixedEventForm() {
       name: name.trim(),
       date,
       time: { start, end },
+      load: toLoadProfile(load),
     }
     await saveDefinition(event)
     setName('')
+    setLoad(DEFAULT_LOAD)
   }
 
   return (
@@ -77,6 +82,7 @@ function FixedEventForm() {
             />
           </div>
         </div>
+        <LoadFields value={load} onChange={setLoad} />
         <button className={buttonClass} disabled={!canSubmit} onClick={submit}>
           追加
         </button>
@@ -91,6 +97,7 @@ function FlexibleTaskForm() {
   const [deadline, setDeadline] = useState('')
   const [duration, setDuration] = useState(60)
   const [priority, setPriority] = useState<Priority>('medium')
+  const [load, setLoad] = useState<LoadValue>(DEFAULT_LOAD)
 
   const canSubmit = name.trim() !== '' && deadline !== '' && duration > 0
 
@@ -105,9 +112,11 @@ function FlexibleTaskForm() {
       deadline,
       estimatedDuration: duration,
       priority,
+      load: toLoadProfile(load),
     }
     await saveDefinition(task)
     setName('')
+    setLoad(DEFAULT_LOAD)
   }
 
   return (
@@ -151,6 +160,7 @@ function FlexibleTaskForm() {
             </select>
           </div>
         </div>
+        <LoadFields value={load} onChange={setLoad} />
         <button className={buttonClass} disabled={!canSubmit} onClick={submit}>
           追加
         </button>

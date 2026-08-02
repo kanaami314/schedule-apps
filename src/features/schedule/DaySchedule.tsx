@@ -4,11 +4,27 @@
  */
 
 import { useMemo, useState } from 'react'
-import type { Category, Id } from '../../domain/types'
+import type { Category, Id, ResolvedLoad } from '../../domain/types'
 import { minutesToTime } from '../../domain/scheduler/intervals'
 import { scheduleDay, type ScheduleDayResult } from '../../domain/scheduler/scheduleDay'
 import type { PlacedItem, UnplacedReason } from '../../domain/scheduler/placement'
+import { classifyLoad, unitLoad, type LoadCategory } from '../../domain/load/score'
 import { useAppStore } from '../../store/appStore'
+
+const LOAD_BADGE: Record<LoadCategory, { label: string; className: string }> = {
+  low: { label: '低負荷', className: 'bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300' },
+  medium: {
+    label: '中負荷',
+    className: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/50 dark:text-yellow-300',
+  },
+  high: { label: '高負荷', className: 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300' },
+}
+
+function LoadBadge({ load }: { load: ResolvedLoad }) {
+  const category = classifyLoad(unitLoad(load))
+  const badge = LOAD_BADGE[category]
+  return <span className={`rounded px-1.5 py-0.5 text-xs ${badge.className}`}>{badge.label}</span>
+}
 
 const KIND_STYLE: Record<PlacedItem['kind'], string> = {
   fixed: 'border-l-4 border-blue-500 bg-blue-50 dark:bg-blue-950/40',
@@ -93,6 +109,7 @@ export function DaySchedule() {
                     {KIND_LABEL[item.kind]}
                   </span>
                   <span className="font-medium">{item.label ?? ''}</span>
+                  {item.load && <LoadBadge load={item.load} />}
                 </li>
               ))}
             </ul>
