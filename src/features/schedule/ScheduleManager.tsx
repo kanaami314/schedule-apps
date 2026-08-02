@@ -10,6 +10,7 @@ import { useAppStore } from '../../store/appStore'
 import { newId, nowLocalIso } from '../../lib/ids'
 import { LoadFields } from './LoadFields'
 import { DEFAULT_LOAD, toLoadProfile, type LoadValue } from './loadValue'
+import { CategorySelect } from './CategorySelect'
 
 const inputClass =
   'w-full rounded border border-gray-300 px-2 py-1 text-sm dark:border-gray-600 dark:bg-gray-800'
@@ -24,6 +25,7 @@ function FixedEventForm() {
   const [date, setDate] = useState('')
   const [start, setStart] = useState('09:00')
   const [end, setEnd] = useState('10:00')
+  const [categoryId, setCategoryId] = useState('')
   const [load, setLoad] = useState<LoadValue>(DEFAULT_LOAD)
 
   const canSubmit = name.trim() !== '' && date !== '' && start !== '' && end !== '' && start < end
@@ -38,6 +40,7 @@ function FixedEventForm() {
       name: name.trim(),
       date,
       time: { start, end },
+      categoryId: categoryId || undefined,
       load: toLoadProfile(load),
     }
     await saveDefinition(event)
@@ -82,6 +85,7 @@ function FixedEventForm() {
             />
           </div>
         </div>
+        <CategorySelect value={categoryId} onChange={setCategoryId} />
         <LoadFields value={load} onChange={setLoad} />
         <button className={buttonClass} disabled={!canSubmit} onClick={submit}>
           追加
@@ -97,6 +101,7 @@ function FlexibleTaskForm() {
   const [deadline, setDeadline] = useState('')
   const [duration, setDuration] = useState(60)
   const [priority, setPriority] = useState<Priority>('medium')
+  const [categoryId, setCategoryId] = useState('')
   const [load, setLoad] = useState<LoadValue>(DEFAULT_LOAD)
 
   const canSubmit = name.trim() !== '' && deadline !== '' && duration > 0
@@ -112,6 +117,7 @@ function FlexibleTaskForm() {
       deadline,
       estimatedDuration: duration,
       priority,
+      categoryId: categoryId || undefined,
       load: toLoadProfile(load),
     }
     await saveDefinition(task)
@@ -160,6 +166,7 @@ function FlexibleTaskForm() {
             </select>
           </div>
         </div>
+        <CategorySelect value={categoryId} onChange={setCategoryId} />
         <LoadFields value={load} onChange={setLoad} />
         <button className={buttonClass} disabled={!canSubmit} onClick={submit}>
           追加

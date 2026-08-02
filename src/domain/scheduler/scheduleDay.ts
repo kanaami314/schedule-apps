@@ -60,6 +60,7 @@ export function scheduleDay(options: ScheduleDayOptions): ScheduleDayResult {
         interval: { start: timeToMinutes(fixed.time.start), end: timeToMinutes(fixed.time.end) },
         movable: false,
         load: resolveLoad(fixed.load, fixed.categoryId, options.categories),
+        categoryId: fixed.categoryId,
         label: fixed.name,
       }
     })
@@ -84,7 +85,10 @@ export function scheduleDay(options: ScheduleDayOptions): ScheduleDayResult {
   const taskById = new Map(flexibleTasks.map((t) => [t.id, t]))
   for (const placement of flexiblePlacements) {
     const task = placement.sourceId ? taskById.get(placement.sourceId) : undefined
-    if (task) placement.load = resolveLoad(task.load, task.categoryId, options.categories)
+    if (task) {
+      placement.load = resolveLoad(task.load, task.categoryId, options.categories)
+      placement.categoryId = task.categoryId
+    }
   }
 
   // 4. 負荷を持つ予定から休憩を挿入。

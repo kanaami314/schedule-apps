@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { useAppStore } from './store/appStore'
 import { ScheduleManager } from './features/schedule/ScheduleManager'
 import { DaySchedule } from './features/schedule/DaySchedule'
+import { CategoryManager } from './features/schedule/CategoryManager'
 
 function App() {
   const init = useAppStore((s) => s.init)
@@ -20,6 +21,10 @@ function App() {
       {loaded ? (
         <div className="space-y-8">
           <ScheduleManager />
+          <section>
+            <h2 className="mb-3 text-lg font-semibold">カテゴリ</h2>
+            <CategoryManager />
+          </section>
           <section>
             <h2 className="mb-3 text-lg font-semibold">自動スケジュール</h2>
             <DaySchedule />

@@ -27,6 +27,8 @@ export interface PlacedItem {
   movable: boolean
   /** 解決済み負荷（負荷を持つ予定のみ）。 */
   load?: ResolvedLoad
+  /** 由来の予定が属するカテゴリ（色分け等に使用, §8.4）。 */
+  categoryId?: Id
   label?: string
 }
 

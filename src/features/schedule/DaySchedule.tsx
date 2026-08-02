@@ -3,13 +3,24 @@
  * 対象日と稼働時間帯を選び「自動配置」で、固定予定＋柔軟タスクから配置＋休憩挿入を実行する。
  */
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type CSSProperties } from 'react'
 import type { Category, Id, ResolvedLoad } from '../../domain/types'
 import { minutesToTime, timeToMinutes, type Interval } from '../../domain/scheduler/intervals'
 import { scheduleDay, type ScheduleDayResult } from '../../domain/scheduler/scheduleDay'
 import type { PlacedItem, UnplacedReason } from '../../domain/scheduler/placement'
 import { classifyLoad, unitLoad, type LoadCategory } from '../../domain/load/score'
+import { categoryChain } from '../../domain/load/inheritance'
 import { useAppStore } from '../../store/appStore'
+
+/** カテゴリの最上位の色を返す（§8.4）。 */
+function topLevelColor(
+  categoryId: Id | undefined,
+  categories: ReadonlyMap<Id, Category>,
+): string | undefined {
+  if (!categoryId) return undefined
+  const chain = categoryChain(categoryId, categories)
+  return chain[chain.length - 1]?.color
+}
 
 /** 1分あたりの表示ピクセル数。 */
 const PX_PER_MIN = 1
@@ -56,7 +67,15 @@ function todayIso(): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
 }
 
-function DayGrid({ timeline, window }: { timeline: PlacedItem[]; window: Interval }) {
+function DayGrid({
+  timeline,
+  window,
+  categories,
+}: {
+  timeline: PlacedItem[]
+  window: Interval
+  categories: ReadonlyMap<Id, Category>
+}) {
   const height = (window.end - window.start) * PX_PER_MIN
   const firstHour = Math.ceil(window.start / 60)
   const lastHour = Math.floor(window.end / 60)
@@ -79,11 +98,16 @@ function DayGrid({ timeline, window }: { timeline: PlacedItem[]; window: Interva
         {timeline.map((item) => {
           const top = (item.interval.start - window.start) * PX_PER_MIN
           const blockHeight = Math.max((item.interval.end - item.interval.start) * PX_PER_MIN, 16)
+          const color = topLevelColor(item.categoryId, categories)
+          // §8.4: 固定予定は実線枠、それ以外は破線枠。色は最上位カテゴリ基準。
+          const borderStyle: CSSProperties = color
+            ? { borderColor: color, borderStyle: item.kind === 'fixed' ? 'solid' : 'dashed', borderWidth: 1 }
+            : {}
           return (
             <div
               key={item.id}
               className={`absolute left-0 right-0 overflow-hidden rounded border-l-4 px-1.5 py-0.5 text-xs ${KIND_STYLE[item.kind]}`}
-              style={{ top, height: blockHeight }}
+              style={{ top, height: blockHeight, ...borderStyle }}
             >
               <div className="flex items-center gap-1">
                 <span className="font-mono text-[10px] text-gray-600 dark:text-gray-300">
@@ -156,7 +180,7 @@ export function DaySchedule() {
           {result.timeline.length === 0 ? (
             <p className="text-sm text-gray-500">この日に配置された予定はありません。</p>
           ) : (
-            <DayGrid timeline={result.timeline} window={window} />
+            <DayGrid timeline={result.timeline} window={window} categories={categoryMap} />
           )}
 
           {result.unplaced.length > 0 && (
