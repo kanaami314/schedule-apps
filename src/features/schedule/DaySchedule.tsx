@@ -1,37 +1,25 @@
 /**
- * 単日の自動スケジューリング結果を表示するUI。
- * 日付を選び「自動配置」で、固定予定＋柔軟タスクから配置＋休憩挿入を実行して表示する。
+ * 単日の自動スケジューリング結果を、時間軸グリッド（カレンダー日表示）で表示するUI。
+ * 対象日と稼働時間帯を選び「自動配置」で、固定予定＋柔軟タスクから配置＋休憩挿入を実行する。
  */
 
 import { useMemo, useState } from 'react'
 import type { Category, Id, ResolvedLoad } from '../../domain/types'
-import { minutesToTime } from '../../domain/scheduler/intervals'
+import { minutesToTime, timeToMinutes, type Interval } from '../../domain/scheduler/intervals'
 import { scheduleDay, type ScheduleDayResult } from '../../domain/scheduler/scheduleDay'
 import type { PlacedItem, UnplacedReason } from '../../domain/scheduler/placement'
 import { classifyLoad, unitLoad, type LoadCategory } from '../../domain/load/score'
 import { useAppStore } from '../../store/appStore'
 
-const LOAD_BADGE: Record<LoadCategory, { label: string; className: string }> = {
-  low: { label: '低負荷', className: 'bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300' },
-  medium: {
-    label: '中負荷',
-    className: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/50 dark:text-yellow-300',
-  },
-  high: { label: '高負荷', className: 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300' },
-}
-
-function LoadBadge({ load }: { load: ResolvedLoad }) {
-  const category = classifyLoad(unitLoad(load))
-  const badge = LOAD_BADGE[category]
-  return <span className={`rounded px-1.5 py-0.5 text-xs ${badge.className}`}>{badge.label}</span>
-}
+/** 1分あたりの表示ピクセル数。 */
+const PX_PER_MIN = 1
 
 const KIND_STYLE: Record<PlacedItem['kind'], string> = {
-  fixed: 'border-l-4 border-blue-500 bg-blue-50 dark:bg-blue-950/40',
-  flexible: 'border-l-4 border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40',
-  free: 'border-l-4 border-purple-500 bg-purple-50 dark:bg-purple-950/40',
-  routine: 'border-l-4 border-amber-500 bg-amber-50 dark:bg-amber-950/40',
-  break: 'border-l-4 border-gray-400 bg-gray-50 dark:bg-gray-800/60',
+  fixed: 'border-blue-500 bg-blue-100 dark:bg-blue-900/60',
+  flexible: 'border-emerald-500 bg-emerald-100 dark:bg-emerald-900/60',
+  free: 'border-purple-500 bg-purple-100 dark:bg-purple-900/60',
+  routine: 'border-amber-500 bg-amber-100 dark:bg-amber-900/60',
+  break: 'border-gray-400 bg-gray-100 dark:bg-gray-700/70',
 }
 
 const KIND_LABEL: Record<PlacedItem['kind'], string> = {
@@ -48,17 +36,83 @@ const REASON_LABEL: Record<UnplacedReason, string> = {
   minChunkNotMet: '最短作業時間を満たせない',
 }
 
+const LOAD_BADGE: Record<LoadCategory, { label: string; className: string }> = {
+  low: { label: '低', className: 'bg-green-200 text-green-800 dark:bg-green-800 dark:text-green-100' },
+  medium: {
+    label: '中',
+    className: 'bg-yellow-200 text-yellow-800 dark:bg-yellow-800 dark:text-yellow-100',
+  },
+  high: { label: '高', className: 'bg-red-200 text-red-800 dark:bg-red-800 dark:text-red-100' },
+}
+
+function LoadBadge({ load }: { load: ResolvedLoad }) {
+  const badge = LOAD_BADGE[classifyLoad(unitLoad(load))]
+  return <span className={`rounded px-1 text-[10px] leading-none ${badge.className}`}>{badge.label}</span>
+}
+
 function todayIso(): string {
   const d = new Date()
   const p = (n: number) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
 }
 
+function DayGrid({ timeline, window }: { timeline: PlacedItem[]; window: Interval }) {
+  const height = (window.end - window.start) * PX_PER_MIN
+  const firstHour = Math.ceil(window.start / 60)
+  const lastHour = Math.floor(window.end / 60)
+  const hours: number[] = []
+  for (let h = firstHour; h <= lastHour; h++) hours.push(h)
+
+  return (
+    <div className="relative overflow-hidden rounded border border-gray-200 dark:border-gray-700" style={{ height }}>
+      {/* 時刻の目盛り */}
+      {hours.map((h) => {
+        const top = (h * 60 - window.start) * PX_PER_MIN
+        return (
+          <div key={h} className="absolute left-0 right-0 border-t border-gray-100 dark:border-gray-800" style={{ top }}>
+            <span className="absolute -top-2 left-1 text-[10px] text-gray-400">{String(h).padStart(2, '0')}:00</span>
+          </div>
+        )
+      })}
+      {/* 予定ブロック */}
+      <div className="absolute bottom-0 left-12 right-1 top-0">
+        {timeline.map((item) => {
+          const top = (item.interval.start - window.start) * PX_PER_MIN
+          const blockHeight = Math.max((item.interval.end - item.interval.start) * PX_PER_MIN, 16)
+          return (
+            <div
+              key={item.id}
+              className={`absolute left-0 right-0 overflow-hidden rounded border-l-4 px-1.5 py-0.5 text-xs ${KIND_STYLE[item.kind]}`}
+              style={{ top, height: blockHeight }}
+            >
+              <div className="flex items-center gap-1">
+                <span className="font-mono text-[10px] text-gray-600 dark:text-gray-300">
+                  {minutesToTime(item.interval.start)}
+                </span>
+                <span className="text-[10px] text-gray-500">{KIND_LABEL[item.kind]}</span>
+                {item.load && <LoadBadge load={item.load} />}
+              </div>
+              {item.label && <div className="truncate font-medium">{item.label}</div>}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+const timeInputClass =
+  'rounded border border-gray-300 px-2 py-1 text-sm dark:border-gray-600 dark:bg-gray-800'
+const fieldLabel = 'block text-xs font-medium text-gray-600 dark:text-gray-300'
+
 export function DaySchedule() {
   const definitions = useAppStore((s) => s.definitions)
   const categories = useAppStore((s) => s.categories)
   const [date, setDate] = useState(todayIso())
+  const [startTime, setStartTime] = useState('07:00')
+  const [endTime, setEndTime] = useState('23:00')
   const [result, setResult] = useState<ScheduleDayResult | null>(null)
+  const [window, setWindow] = useState<Interval>({ start: 420, end: 1380 })
 
   const categoryMap = useMemo(
     () => new Map<Id, Category>(categories.map((c) => [c.id, c])),
@@ -66,20 +120,26 @@ export function DaySchedule() {
   )
 
   function run() {
-    setResult(scheduleDay({ date, definitions, categories: categoryMap }))
+    const w: Interval = { start: timeToMinutes(startTime), end: timeToMinutes(endTime) }
+    if (w.end <= w.start) return
+    setWindow(w)
+    setResult(scheduleDay({ date, definitions, categories: categoryMap, window: w }))
   }
 
   return (
     <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-700">
-      <div className="mb-3 flex items-end gap-2">
+      <div className="mb-3 flex flex-wrap items-end gap-2">
         <div>
-          <label className="block text-xs font-medium text-gray-600 dark:text-gray-300">対象日</label>
-          <input
-            type="date"
-            className="rounded border border-gray-300 px-2 py-1 text-sm dark:border-gray-600 dark:bg-gray-800"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-          />
+          <label className={fieldLabel}>対象日</label>
+          <input type="date" className={timeInputClass} value={date} onChange={(e) => setDate(e.target.value)} />
+        </div>
+        <div>
+          <label className={fieldLabel}>稼働開始</label>
+          <input type="time" className={timeInputClass} value={startTime} onChange={(e) => setStartTime(e.target.value)} />
+        </div>
+        <div>
+          <label className={fieldLabel}>稼働終了</label>
+          <input type="time" className={timeInputClass} value={endTime} onChange={(e) => setEndTime(e.target.value)} />
         </div>
         <button
           className="rounded bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700"
@@ -96,23 +156,7 @@ export function DaySchedule() {
           {result.timeline.length === 0 ? (
             <p className="text-sm text-gray-500">この日に配置された予定はありません。</p>
           ) : (
-            <ul className="space-y-1">
-              {result.timeline.map((item) => (
-                <li
-                  key={item.id}
-                  className={`flex items-center gap-3 rounded px-3 py-1.5 text-sm ${KIND_STYLE[item.kind]}`}
-                >
-                  <span className="font-mono text-xs text-gray-600 dark:text-gray-300">
-                    {minutesToTime(item.interval.start)}–{minutesToTime(item.interval.end)}
-                  </span>
-                  <span className="rounded bg-white/70 px-1.5 py-0.5 text-xs text-gray-600 dark:bg-black/30 dark:text-gray-300">
-                    {KIND_LABEL[item.kind]}
-                  </span>
-                  <span className="font-medium">{item.label ?? ''}</span>
-                  {item.load && <LoadBadge load={item.load} />}
-                </li>
-              ))}
-            </ul>
+            <DayGrid timeline={result.timeline} window={window} />
           )}
 
           {result.unplaced.length > 0 && (
