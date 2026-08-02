@@ -3,6 +3,7 @@ import { useAppStore } from './store/appStore'
 import { ScheduleManager } from './features/schedule/ScheduleManager'
 import { DaySchedule } from './features/schedule/DaySchedule'
 import { CategoryManager } from './features/schedule/CategoryManager'
+import { TaskList } from './features/schedule/TaskList'
 
 function App() {
   const init = useAppStore((s) => s.init)
@@ -24,6 +25,10 @@ function App() {
           <section>
             <h2 className="mb-3 text-lg font-semibold">カテゴリ</h2>
             <CategoryManager />
+          </section>
+          <section>
+            <h2 className="mb-3 text-lg font-semibold">タスク一覧</h2>
+            <TaskList />
           </section>
           <section>
             <h2 className="mb-3 text-lg font-semibold">自動スケジュール</h2>
