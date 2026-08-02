@@ -19,9 +19,6 @@ dist-ssr
 
 # Claude Code local settings
 .claude/
-
-# ChatGPT conversation history (kept locally for reference, not committed)
-タイムスケジューラ開発 - スケジュール管理アプリ開発.md
 .DS_Store
 *.suo
 *.ntvs*
