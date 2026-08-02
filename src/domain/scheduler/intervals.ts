@@ -5,12 +5,25 @@
  * 空き時間（フリーギャップ）の算出、重なり判定、結合などを行う。
  */
 
-import type { Minutes } from '../types'
+import type { IsoTime, Minutes } from '../types'
 
 /** 半開区間 [start, end)。単位は「その日の00:00からの分数」。 */
 export interface Interval {
   start: Minutes
   end: Minutes
+}
+
+/** `HH:mm` を、その日の00:00からの分数へ変換する。 */
+export function timeToMinutes(time: IsoTime): Minutes {
+  const [h, m] = time.split(':').map(Number)
+  return h * 60 + m
+}
+
+/** その日の00:00からの分数を `HH:mm` へ変換する（24時以降は切り詰めない）。 */
+export function minutesToTime(minutes: Minutes): IsoTime {
+  const h = Math.floor(minutes / 60)
+  const m = Math.round(minutes % 60)
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
 }
 
 /** 区間の長さ（分）。負なら0とみなす。 */

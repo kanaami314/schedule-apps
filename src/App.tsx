@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { useAppStore } from './store/appStore'
 import { ScheduleManager } from './features/schedule/ScheduleManager'
+import { DaySchedule } from './features/schedule/DaySchedule'
 
 function App() {
   const init = useAppStore((s) => s.init)
@@ -17,7 +18,13 @@ function App() {
         <p className="text-sm text-gray-500">予定を登録すると IndexedDB に保存されます。</p>
       </header>
       {loaded ? (
-        <ScheduleManager />
+        <div className="space-y-8">
+          <ScheduleManager />
+          <section>
+            <h2 className="mb-3 text-lg font-semibold">自動スケジュール</h2>
+            <DaySchedule />
+          </section>
+        </div>
       ) : (
         <p className="text-gray-500">読み込み中…</p>
       )}

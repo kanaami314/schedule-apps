@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest'
 import App from './App'
 
 describe('App', () => {
-  it('renders without crashing', () => {
+  it('renders the heading without crashing', () => {
     render(<App />)
-    expect(screen.getByText('タイムスケジューラ — 開発中')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'タイムスケジューラ' })).toBeInTheDocument()
   })
 })
