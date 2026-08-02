@@ -11,6 +11,7 @@ import { newId, nowLocalIso } from '../../lib/ids'
 import { LoadFields } from './LoadFields'
 import { DEFAULT_LOAD, toLoadProfile, type LoadValue } from './loadValue'
 import { CategorySelect } from './CategorySelect'
+import { RoutineForm } from './RoutineForm'
 
 const inputClass =
   'w-full rounded border border-gray-300 px-2 py-1 text-sm dark:border-gray-600 dark:bg-gray-800'
@@ -238,6 +239,7 @@ export function ScheduleManager() {
       <div className="space-y-4">
         <FixedEventForm />
         <FlexibleTaskForm />
+        <RoutineForm />
       </div>
       <div>
         <h3 className="mb-3 font-semibold">登録済みの予定</h3>

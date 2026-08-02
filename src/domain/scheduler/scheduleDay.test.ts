@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { Category, FixedEvent, FlexibleTask } from '../types'
+import type { Category, FixedEvent, FlexibleTask, LifeRoutine } from '../types'
 import { scheduleDay } from './scheduleDay'
 
 const DATE = '2026-08-05'
@@ -94,5 +94,72 @@ describe('scheduleDay', () => {
       definitions: [other],
     })
     expect(result.timeline).toHaveLength(0)
+  })
+})
+
+function routine(o: Partial<LifeRoutine> & { id: string }): LifeRoutine {
+  return {
+    kind: 'routine',
+    createdAt: '2026-08-01T00:00',
+    updatedAt: '2026-08-01T00:00',
+    routineType: 'meal',
+    occurrences: [{ allowedRange: { start: '12:00', end: '14:00' }, requiredTime: 45 }],
+    ...o,
+  }
+}
+
+describe('scheduleDay — 生活ルーチン (§7)', () => {
+  it('実行可能時間帯へ配置され、固定予定より後に置かれる', () => {
+    const result = scheduleDay({
+      date: DATE,
+      categories: noCategories,
+      window: { start: 540, end: 1080 },
+      definitions: [routine({ id: 'meal' })],
+    })
+    const meal = result.timeline.find((t) => t.kind === 'routine')
+    expect(meal?.interval).toEqual({ start: 720, end: 765 }) // 12:00-12:45
+    expect(meal?.movable).toBe(false)
+  })
+
+  it('固定予定で埋まっていれば配置しない（未配置）', () => {
+    const result = scheduleDay({
+      date: DATE,
+      categories: noCategories,
+      window: { start: 540, end: 1080 },
+      definitions: [
+        fixed({ id: 'busy', start: '12:00', end: '14:00' }), // 実行可能帯を全部埋める
+        routine({ id: 'meal' }),
+      ],
+    })
+    expect(result.timeline.some((t) => t.kind === 'routine')).toBe(false)
+  })
+
+  it('実行曜日に含まれない日は配置しない', () => {
+    // 2026-08-05 は水曜(3)。金曜(5)のみ有効なルーチンは配置されない。
+    const result = scheduleDay({
+      date: DATE,
+      categories: noCategories,
+      window: { start: 540, end: 1080 },
+      definitions: [routine({ id: 'meal', activeWeekdays: [5] })],
+    })
+    expect(result.timeline.some((t) => t.kind === 'routine')).toBe(false)
+  })
+
+  it('食事の回復で高負荷の休憩挿入が抑えられる場合がある', () => {
+    // 高負荷2hで6.0 → 直後に30分食事(50%減=3.0) を挟むと、その後の休憩要否が変わる
+    const withMeal = scheduleDay({
+      date: DATE,
+      categories: noCategories,
+      window: { start: 540, end: 1080 },
+      definitions: [
+        fixed({ id: 'hard', start: '09:00', end: '11:00', load: { focus: 3, mental: 3, physical: 3 } }),
+        routine({
+          id: 'lunch',
+          occurrences: [{ allowedRange: { start: '11:00', end: '12:00' }, requiredTime: 45 }],
+        }),
+      ],
+    })
+    // 食事が回復区間として配置されている
+    expect(withMeal.timeline.some((t) => t.kind === 'routine')).toBe(true)
   })
 })

@@ -3,25 +3,35 @@
  *
  * これまでの部品を1日分つなぐ:
  *   1. 固定予定を占有として確定（移動しない, §3/§25）
- *   2. 柔軟なタスクを配置順に整列（C-3）し、空き時間へ貪欲配置
- *   3. 各予定の負荷を継承解決（§8.3）
- *   4. 連続負荷を追跡し、必要な位置へ休憩を挿入（§12）
+ *   2. 生活ルーチンを実行可能時間帯へ配置（固定の次に優先, §3/§7）
+ *   3. 柔軟なタスクを配置順に整列（C-3）し、残りの空き時間へ貪欲配置
+ *   4. 各予定の負荷を継承解決（§8.3）
+ *   5. 連続負荷を追跡し、必要な位置へ休憩を挿入（§12）。
+ *      食事・入浴・睡眠は回復区間として負荷計算に反映（§13）。
  *
- * スケルトンの範囲: 固定予定の繰り返し展開・生活ルーチン・自由活動・付随時間・
- * 実行可能時間帯などは未対応（[[project-status]] 参照）。
+ * スケルトンの範囲: 固定予定の繰り返し展開・自由活動・付随時間・
+ * 柔軟タスクの実行可能時間帯などは未対応（[[project-status]] 参照）。
  */
 
-import type { Category, Id, IsoDate, IsoDateTime, Minutes, ResolvedLoad } from '../types'
-import type { ScheduleDefinition } from '../types'
+import type { Category, Id, IsoDate, IsoDateTime, Minutes, ResolvedLoad, Weekday } from '../types'
+import type { LifeRoutine, RoutineType, ScheduleDefinition } from '../types'
 import { resolveLoad } from '../load/inheritance'
 import type { LoadSegment } from '../load/continuous'
+import type { RecoveryIntervalType } from '../load/recovery'
 import { insertBreaks, type TimelineEntry } from './breakInsertion'
-import { timeToMinutes, type Interval } from './intervals'
+import { duration, freeGaps, timeToMinutes, type Interval } from './intervals'
 import { placeFlexibleTasks, type PlacedItem, type Unplaced } from './placement'
 import { orderFlexibleTasks } from './taskOrder'
 
 /** 既定の稼働時間窓（終日）。 */
 export const FULL_DAY: Interval = { start: 0, end: 24 * 60 }
+
+/** 回復区間となる生活ルーチンの種類 → 回復区間種別。家事(chore)は回復区間ではない（§13）。 */
+const ROUTINE_RECOVERY: Partial<Record<RoutineType, RecoveryIntervalType>> = {
+  meal: 'meal',
+  bath: 'bath',
+  sleep: 'sleep',
+}
 
 export interface ScheduleDayOptions {
   date: IsoDate
@@ -36,22 +46,59 @@ export interface ScheduleDayOptions {
 }
 
 export interface ScheduleDayResult {
-  /** start 昇順に整列した、固定予定・柔軟タスク・休憩を含むタイムライン。 */
+  /** start 昇順に整列した、固定予定・生活ルーチン・柔軟タスク・休憩を含むタイムライン。 */
   timeline: PlacedItem[]
   /** 配置できなかった柔軟なタスクと理由（§16.6）。 */
   unplaced: Unplaced[]
+}
+
+/** 対象日の曜日（0=日〜6=土）。 */
+function weekdayOf(date: IsoDate): Weekday {
+  return new Date(`${date}T00:00`).getDay() as Weekday
+}
+
+/** 生活ルーチンの各回を実行可能時間帯へ配置する（§7）。配置できた区間の配列を返す。 */
+function placeRoutines(
+  routines: readonly LifeRoutine[],
+  window: Interval,
+  weekday: Weekday,
+  busy: Interval[],
+): PlacedItem[] {
+  const placements: PlacedItem[] = []
+  for (const routine of routines) {
+    if (routine.activeWeekdays && !routine.activeWeekdays.includes(weekday)) continue
+    routine.occurrences.forEach((occ, index) => {
+      const allowed: Interval = {
+        start: Math.max(timeToMinutes(occ.allowedRange.start), window.start),
+        end: Math.min(timeToMinutes(occ.allowedRange.end), window.end),
+      }
+      const gap = freeGaps(allowed, busy).find((g) => duration(g) >= occ.requiredTime)
+      if (!gap) return // 必要時間を確保できなければ配置しない（§7）。
+      const interval: Interval = { start: gap.start, end: gap.start + occ.requiredTime }
+      placements.push({
+        id: `${routine.id}#${index}`,
+        sourceId: routine.id,
+        kind: 'routine',
+        interval,
+        movable: false,
+        label: routine.name ?? routine.routineType,
+      })
+      busy.push(interval)
+    })
+  }
+  return placements
 }
 
 /** 対象日の1日分のスケジュールを組む。 */
 export function scheduleDay(options: ScheduleDayOptions): ScheduleDayResult {
   const window = options.window ?? FULL_DAY
   const referenceTime = options.referenceTime ?? `${options.date}T00:00`
+  const weekday = weekdayOf(options.date)
 
   // 1. 固定予定（対象日）を占有として確定。
   const fixedPlacements: PlacedItem[] = options.definitions
     .filter((d) => d.kind === 'fixed' && d.date === options.date)
     .map((d) => {
-      // d は kind==='fixed' に絞り込み済み。
       const fixed = d as Extract<ScheduleDefinition, { kind: 'fixed' }>
       return {
         id: fixed.id,
@@ -67,7 +114,13 @@ export function scheduleDay(options: ScheduleDayOptions): ScheduleDayResult {
 
   const busy: Interval[] = fixedPlacements.map((p) => p.interval)
 
-  // 2. 柔軟なタスクを整列して貪欲配置。
+  // 2. 生活ルーチンを配置（固定の次に優先, §3）。busy を更新する。
+  const routines = options.definitions.filter(
+    (d): d is LifeRoutine => d.kind === 'routine',
+  )
+  const routinePlacements = placeRoutines(routines, window, weekday, busy)
+
+  // 3. 柔軟なタスクを整列して残りの空きへ貪欲配置。
   const flexibleTasks = options.definitions.filter(
     (d): d is Extract<ScheduleDefinition, { kind: 'flexible' }> => d.kind === 'flexible',
   )
@@ -81,7 +134,7 @@ export function scheduleDay(options: ScheduleDayOptions): ScheduleDayResult {
     tasks: ordered,
   })
 
-  // 3. 柔軟タスクの配置に負荷を付与。
+  // 4. 柔軟タスクの配置に負荷とカテゴリを付与。
   const taskById = new Map(flexibleTasks.map((t) => [t.id, t]))
   for (const placement of flexiblePlacements) {
     const task = placement.sourceId ? taskById.get(placement.sourceId) : undefined
@@ -91,9 +144,9 @@ export function scheduleDay(options: ScheduleDayOptions): ScheduleDayResult {
     }
   }
 
-  // 4. 負荷を持つ予定から休憩を挿入。
-  const loadBearing = [...fixedPlacements, ...flexiblePlacements]
-  const entries: TimelineEntry[] = loadBearing
+  // 5. 負荷を持つ予定と回復区間（食事/入浴/睡眠）から休憩を挿入。
+  const routineTypeById = new Map(routines.map((r) => [r.id, r.routineType]))
+  const loadEntries: TimelineEntry[] = [...fixedPlacements, ...flexiblePlacements]
     .filter((p): p is PlacedItem & { load: ResolvedLoad } => p.load !== undefined)
     .map((p) => ({
       interval: p.interval,
@@ -103,8 +156,25 @@ export function scheduleDay(options: ScheduleDayOptions): ScheduleDayResult {
         minutes: p.interval.end - p.interval.start,
       } satisfies LoadSegment,
     }))
-  const { breaks } = insertBreaks(entries, window)
+  const recoveryEntries: TimelineEntry[] = routinePlacements.flatMap((p) => {
+    const routineType = p.sourceId ? routineTypeById.get(p.sourceId) : undefined
+    const recoveryType = routineType ? ROUTINE_RECOVERY[routineType] : undefined
+    if (!recoveryType) return []
+    const entry: TimelineEntry = {
+      interval: p.interval,
+      segment: {
+        type: 'recovery',
+        interval: recoveryType,
+        minutes: p.interval.end - p.interval.start,
+      },
+    }
+    return [entry]
+  })
 
-  const timeline = [...loadBearing, ...breaks].sort((a, b) => a.interval.start - b.interval.start)
+  const { breaks } = insertBreaks([...loadEntries, ...recoveryEntries], window)
+
+  const timeline = [...fixedPlacements, ...routinePlacements, ...flexiblePlacements, ...breaks].sort(
+    (a, b) => a.interval.start - b.interval.start,
+  )
   return { timeline, unplaced }
 }

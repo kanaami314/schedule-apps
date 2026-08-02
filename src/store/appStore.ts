@@ -8,9 +8,11 @@
 import { create } from 'zustand'
 import type { Category, Id, ScheduleDefinition } from '../domain/types'
 import { createDexieRepository, type AppRepository } from '../data'
-import { newId } from '../lib/ids'
 
 const repository: AppRepository = createDexieRepository()
+
+/** init の重複実行を防ぐ（StrictMode の二重呼び出し対策）。 */
+let initPromise: Promise<void> | null = null
 
 /** 初期カテゴリ（§8.1）と既定色。最上位カテゴリとして投入する。 */
 const DEFAULT_CATEGORY_SEEDS: { name: string; color: string }[] = [
@@ -26,8 +28,9 @@ const DEFAULT_CATEGORY_SEEDS: { name: string; color: string }[] = [
 ]
 
 function buildDefaultCategories(): Category[] {
+  // ID は固定にし、二重投入されても upsert で1件に収束するようにする（冪等）。
   return DEFAULT_CATEGORY_SEEDS.map((seed, index) => ({
-    id: newId(),
+    id: `default-category-${index}`,
     name: seed.name,
     color: seed.color,
     order: index,
@@ -58,17 +61,22 @@ export const useAppStore = create<AppState>((set, get) => ({
   definitions: [],
 
   async init() {
-    const [loadedCategories, definitions] = await Promise.all([
-      repository.categories.all(),
-      repository.definitions.all(),
-    ])
-    // 初回のみ初期カテゴリを投入する（§8.1）。
-    let categories = loadedCategories
-    if (categories.length === 0) {
-      categories = buildDefaultCategories()
-      await repository.categories.bulkPut(categories)
-    }
-    set({ categories, definitions, loaded: true })
+    // 重複呼び出しは同じ Promise を返し、二重投入を防ぐ。
+    if (initPromise) return initPromise
+    initPromise = (async () => {
+      const [loadedCategories, definitions] = await Promise.all([
+        repository.categories.all(),
+        repository.definitions.all(),
+      ])
+      // 初回のみ初期カテゴリを投入する（§8.1）。ID固定なので冪等。
+      let categories = loadedCategories
+      if (categories.length === 0) {
+        categories = buildDefaultCategories()
+        await repository.categories.bulkPut(categories)
+      }
+      set({ categories, definitions, loaded: true })
+    })()
+    return initPromise
   },
 
   async saveDefinition(def) {
