@@ -171,7 +171,7 @@ export function BalanceAnalysis() {
 
       {/* 負荷分析（§20.7）: 期間の配置予定の平均負荷区分 */}
       <div className="rounded-lg border border-gray-200 p-3 dark:border-gray-700">
-        <h4 className="mb-2 text-sm font-semibold">負荷分析（§20.7）</h4>
+        <h4 className="mb-2 text-sm font-semibold">負荷分析</h4>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <div className="flex items-center justify-between rounded border border-gray-100 px-2 py-1 dark:border-gray-800">
             <span className="text-xs text-gray-500">総合</span>

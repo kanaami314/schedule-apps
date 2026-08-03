@@ -182,7 +182,7 @@ export function Reflection() {
 
       {/* 自動集計（§19.1） */}
       <div className={cardClass}>
-        <h3 className="mb-3 text-sm font-semibold">自動集計（§19.1）</h3>
+        <h3 className="mb-3 text-sm font-semibold">自動集計</h3>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
           <Stat label="予定時間合計" value={fmtMinutes(summary.plannedMinutes)} />
           <Stat label="実績時間合計" value={fmtMinutes(summary.actualMinutes)} />

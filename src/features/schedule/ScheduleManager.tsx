@@ -229,7 +229,7 @@ function FixedEventForm({ editing, onDone }: EditFormProps) {
           </div>
         </div>
         <div>
-          <label className={labelClass}>繰り返し（§4.3）</label>
+          <label className={labelClass}>繰り返し</label>
           <select
             className={inputClass}
             value={repeatKind}
@@ -249,7 +249,7 @@ function FixedEventForm({ editing, onDone }: EditFormProps) {
         </div>
         {!minimalMode && (
           <div>
-            <label className={labelClass}>付随時間（分, §4.4）</label>
+            <label className={labelClass}>付随時間（分）</label>
             <div className="flex gap-2">
               <div className="flex-1">
                 <span className="text-[10px] text-gray-400">移動</span>
@@ -407,7 +407,7 @@ function FlexibleTaskForm({ editing, onDone }: EditFormProps) {
         <CategorySelect value={categoryId} onChange={setCategoryId} />
         {projects.length > 0 && (
           <div>
-            <label className={labelClass}>プロジェクト（§9）</label>
+            <label className={labelClass}>プロジェクト</label>
             <select
               className={inputClass}
               value={projectId}

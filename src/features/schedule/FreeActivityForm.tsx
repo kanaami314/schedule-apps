@@ -198,7 +198,7 @@ export function FreeActivityForm({ editing, onDone }: FreeActivityFormProps) {
         <CategorySelect value={categoryId} onChange={setCategoryId} />
 
         <div>
-          <p className={`${labelClass} mb-1`}>回復効果（§6.1）</p>
+          <p className={`${labelClass} mb-1`}>回復効果</p>
           <div className="space-y-1">
             {RECOVERY_EFFECTS.map((e) => (
               <EffectRow
@@ -212,7 +212,7 @@ export function FreeActivityForm({ editing, onDone }: FreeActivityFormProps) {
         </div>
 
         <div>
-          <p className={`${labelClass} mb-1`}>消耗効果（§6.1）</p>
+          <p className={`${labelClass} mb-1`}>消耗効果</p>
           <div className="space-y-1">
             {DRAIN_EFFECTS.map((e) => (
               <EffectRow
