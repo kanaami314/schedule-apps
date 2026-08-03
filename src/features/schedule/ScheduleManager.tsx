@@ -5,7 +5,14 @@
  */
 
 import { useEffect, useState } from 'react'
-import type { FixedEvent, FlexibleTask, Priority, ScheduleDefinition } from '../../domain/types'
+import type {
+  FixedEvent,
+  FlexibleTask,
+  Priority,
+  RepeatRule,
+  ScheduleDefinition,
+  Weekday,
+} from '../../domain/types'
 import { useAppStore } from '../../store/appStore'
 import { newId, nowLocalIso } from '../../lib/ids'
 import { LoadFields } from './LoadFields'
@@ -16,6 +23,52 @@ import { FreeActivityForm } from './FreeActivityForm'
 
 const cancelButtonClass =
   'rounded border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800'
+
+/** 繰り返しの種類（§4.3）。UI 選択用。 */
+type RepeatKind = 'none' | 'daily' | 'weekly' | 'biweekly' | 'monthly'
+
+const REPEAT_OPTIONS: { value: RepeatKind; label: string }[] = [
+  { value: 'none', label: '繰り返しなし' },
+  { value: 'daily', label: '毎日' },
+  { value: 'weekly', label: '毎週' },
+  { value: 'biweekly', label: '隔週' },
+  { value: 'monthly', label: '毎月' },
+]
+
+/** 曜日ラベル（0=日〜6=土）。 */
+const WEEKDAY_LABELS = ['日', '月', '火', '水', '木', '金', '土'] as const
+
+/** 曜日選択ボタン列（毎週・隔週で使用）。 */
+function WeekdayPicker({
+  selected,
+  onToggle,
+}: {
+  selected: Weekday[]
+  onToggle: (day: Weekday) => void
+}) {
+  return (
+    <div className="flex gap-1">
+      {WEEKDAY_LABELS.map((label, i) => {
+        const day = i as Weekday
+        const on = selected.includes(day)
+        return (
+          <button
+            key={day}
+            type="button"
+            onClick={() => onToggle(day)}
+            className={`h-7 w-7 rounded text-xs font-medium ${
+              on
+                ? 'bg-blue-600 text-white'
+                : 'border border-gray-300 text-gray-600 dark:border-gray-600 dark:text-gray-300'
+            }`}
+          >
+            {label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
 
 const inputClass =
   'w-full rounded border border-gray-300 px-2 py-1 text-sm dark:border-gray-600 dark:bg-gray-800'
@@ -40,6 +93,8 @@ function FixedEventForm({ editing, onDone }: EditFormProps) {
   const [end, setEnd] = useState('10:00')
   const [categoryId, setCategoryId] = useState('')
   const [load, setLoad] = useState<LoadValue>(DEFAULT_LOAD)
+  const [repeatKind, setRepeatKind] = useState<RepeatKind>('none')
+  const [weekdays, setWeekdays] = useState<Weekday[]>([])
 
   // 編集対象が変わったらフォームへ読み込む。
   useEffect(() => {
@@ -50,9 +105,19 @@ function FixedEventForm({ editing, onDone }: EditFormProps) {
     setEnd(target.time.end)
     setCategoryId(target.categoryId ?? '')
     setLoad(fromLoadProfile(target.load))
+    const r = target.repeat
+    setRepeatKind(r?.kind ?? 'none')
+    setWeekdays(r && (r.kind === 'weekly' || r.kind === 'biweekly') ? [...r.weekdays] : [])
   }, [target])
 
-  const canSubmit = name.trim() !== '' && date !== '' && start !== '' && end !== '' && start < end
+  const needsWeekdays = repeatKind === 'weekly' || repeatKind === 'biweekly'
+  const canSubmit =
+    name.trim() !== '' &&
+    date !== '' &&
+    start !== '' &&
+    end !== '' &&
+    start < end &&
+    (!needsWeekdays || weekdays.length > 0)
 
   function reset() {
     setName('')
@@ -61,6 +126,30 @@ function FixedEventForm({ editing, onDone }: EditFormProps) {
     setEnd('10:00')
     setCategoryId('')
     setLoad(DEFAULT_LOAD)
+    setRepeatKind('none')
+    setWeekdays([])
+  }
+
+  function toggleWeekday(day: Weekday) {
+    setWeekdays((prev) =>
+      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day].sort((a, b) => a - b),
+    )
+  }
+
+  /** フォーム状態から繰り返し規則を組み立てる（§4.3）。 */
+  function buildRepeat(): RepeatRule | undefined {
+    switch (repeatKind) {
+      case 'none':
+        return undefined
+      case 'daily':
+        return { kind: 'daily' }
+      case 'weekly':
+        return { kind: 'weekly', weekdays }
+      case 'biweekly':
+        return { kind: 'biweekly', weekdays, anchorDate: date }
+      case 'monthly':
+        return { kind: 'monthly', dayOfMonth: Number(date.slice(8, 10)) }
+    }
   }
 
   async function submit() {
@@ -76,6 +165,7 @@ function FixedEventForm({ editing, onDone }: EditFormProps) {
       time: { start, end },
       categoryId: categoryId || undefined,
       load: toLoadProfile(load),
+      repeat: buildRepeat(),
     }
     await saveDefinition(event)
     reset()
@@ -123,6 +213,25 @@ function FixedEventForm({ editing, onDone }: EditFormProps) {
               onChange={(e) => setEnd(e.target.value)}
             />
           </div>
+        </div>
+        <div>
+          <label className={labelClass}>繰り返し（§4.3）</label>
+          <select
+            className={inputClass}
+            value={repeatKind}
+            onChange={(e) => setRepeatKind(e.target.value as RepeatKind)}
+          >
+            {REPEAT_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+          {needsWeekdays && (
+            <div className="mt-2">
+              <WeekdayPicker selected={weekdays} onToggle={toggleWeekday} />
+            </div>
+          )}
         </div>
         <CategorySelect value={categoryId} onChange={setCategoryId} />
         <LoadFields value={load} onChange={setLoad} />
@@ -255,10 +364,26 @@ function FlexibleTaskForm({ editing, onDone }: EditFormProps) {
   )
 }
 
+/** 繰り返し規則を短い日本語で表す。 */
+function repeatLabel(repeat: RepeatRule | undefined): string {
+  if (!repeat || repeat.kind === 'none') return ''
+  const days = (ws: Weekday[]) => ws.map((w) => WEEKDAY_LABELS[w]).join('')
+  switch (repeat.kind) {
+    case 'daily':
+      return ' · 毎日'
+    case 'weekly':
+      return ` · 毎週(${days(repeat.weekdays)})`
+    case 'biweekly':
+      return ` · 隔週(${days(repeat.weekdays)})`
+    case 'monthly':
+      return ` · 毎月${repeat.dayOfMonth}日`
+  }
+}
+
 function describe(def: ScheduleDefinition): string {
   switch (def.kind) {
     case 'fixed':
-      return `${def.date} ${def.time.start}–${def.time.end}`
+      return `${def.date} ${def.time.start}–${def.time.end}${repeatLabel(def.repeat)}`
     case 'flexible':
       return `期限 ${def.deadline.replace('T', ' ')} / ${def.estimatedDuration}分`
     case 'free':

@@ -22,6 +22,7 @@ import { insertBreaks, type TimelineEntry } from './breakInsertion'
 import { duration, freeGaps, timeToMinutes, type Interval } from './intervals'
 import { placeFlexibleTasks, type PlacedItem, type Unplaced } from './placement'
 import { orderFlexibleTasks } from './taskOrder'
+import { occursOn } from './repeat'
 
 /** 既定の稼働時間窓（終日）。 */
 export const FULL_DAY: Interval = { start: 0, end: 24 * 60 }
@@ -95,9 +96,12 @@ export function scheduleDay(options: ScheduleDayOptions): ScheduleDayResult {
   const referenceTime = options.referenceTime ?? `${options.date}T00:00`
   const weekday = weekdayOf(options.date)
 
-  // 1. 固定予定（対象日）を占有として確定。
+  // 1. 固定予定（対象日に出現するもの）を占有として確定。繰り返しは基準日から展開（§4.3）。
   const fixedPlacements: PlacedItem[] = options.definitions
-    .filter((d) => d.kind === 'fixed' && d.date === options.date)
+    .filter(
+      (d): d is Extract<ScheduleDefinition, { kind: 'fixed' }> =>
+        d.kind === 'fixed' && occursOn(d.date, d.repeat, options.date),
+    )
     .map((d) => {
       const fixed = d as Extract<ScheduleDefinition, { kind: 'fixed' }>
       return {
