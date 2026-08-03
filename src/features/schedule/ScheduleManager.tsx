@@ -304,12 +304,14 @@ function FixedEventForm({ editing, onDone }: EditFormProps) {
 function FlexibleTaskForm({ editing, onDone }: EditFormProps) {
   const saveDefinition = useAppStore((s) => s.saveDefinition)
   const minimalMode = useAppStore((s) => s.minimalMode)
+  const projects = useAppStore((s) => s.projects)
   const target = editing?.kind === 'flexible' ? editing : null
   const [name, setName] = useState('')
   const [deadline, setDeadline] = useState('')
   const [duration, setDuration] = useState(60)
   const [priority, setPriority] = useState<Priority>('medium')
   const [categoryId, setCategoryId] = useState('')
+  const [projectId, setProjectId] = useState('')
   const [load, setLoad] = useState<LoadValue>(DEFAULT_LOAD)
 
   useEffect(() => {
@@ -319,6 +321,7 @@ function FlexibleTaskForm({ editing, onDone }: EditFormProps) {
     setDuration(target.estimatedDuration)
     setPriority(target.priority ?? 'medium')
     setCategoryId(target.categoryId ?? '')
+    setProjectId(target.projectId ?? '')
     setLoad(fromLoadProfile(target.load))
   }, [target])
 
@@ -330,6 +333,7 @@ function FlexibleTaskForm({ editing, onDone }: EditFormProps) {
     setDuration(60)
     setPriority('medium')
     setCategoryId('')
+    setProjectId('')
     setLoad(DEFAULT_LOAD)
   }
 
@@ -346,6 +350,7 @@ function FlexibleTaskForm({ editing, onDone }: EditFormProps) {
       estimatedDuration: duration,
       priority,
       categoryId: categoryId || undefined,
+      projectId: projectId || undefined,
       load: toLoadProfile(load),
     }
     await saveDefinition(task)
@@ -400,6 +405,23 @@ function FlexibleTaskForm({ editing, onDone }: EditFormProps) {
           </div>
         </div>
         <CategorySelect value={categoryId} onChange={setCategoryId} />
+        {projects.length > 0 && (
+          <div>
+            <label className={labelClass}>プロジェクト（§9）</label>
+            <select
+              className={inputClass}
+              value={projectId}
+              onChange={(e) => setProjectId(e.target.value)}
+            >
+              <option value="">（なし）</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
         {!minimalMode && <LoadFields value={load} onChange={setLoad} />}
         <div className="flex gap-2">
           <button className={buttonClass} disabled={!canSubmit} onClick={submit}>

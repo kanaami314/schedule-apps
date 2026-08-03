@@ -6,7 +6,7 @@
  */
 
 import { useMemo, useState } from 'react'
-import type { Category, Id } from '../../domain/types'
+import type { Category, Id, ScheduleDefinition } from '../../domain/types'
 import { categoryChain } from '../../domain/load/inheritance'
 import { minutesToTime } from '../../domain/scheduler/intervals'
 import { scheduleDay } from '../../domain/scheduler/scheduleDay'
@@ -41,14 +41,21 @@ const tabClass = (active: boolean) =>
 export function CalendarView() {
   const definitions = useAppStore((s) => s.definitions)
   const categories = useAppStore((s) => s.categories)
+  const projects = useAppStore((s) => s.projects)
+  const minimalMode = useAppStore((s) => s.minimalMode)
 
   const [view, setView] = useState<View>('week')
   const [anchor, setAnchor] = useState(() => new Date())
   const [categoryFilter, setCategoryFilter] = useState<Id | ''>('')
+  const [projectFilter, setProjectFilter] = useState<Id | ''>('')
 
   const categoryMap = useMemo(
     () => new Map<Id, Category>(categories.map((c) => [c.id, c])),
     [categories],
+  )
+  const defById = useMemo(
+    () => new Map<Id, ScheduleDefinition>(definitions.map((d) => [d.id, d])),
+    [definitions],
   )
   const topLevels = useMemo(() => categories.filter((c) => !c.parentId), [categories])
 
@@ -58,11 +65,20 @@ export function CalendarView() {
     return chain[chain.length - 1]?.id ?? ''
   }
 
-  /** 対象日の配置予定（休憩を除く・カテゴリ絞り込み適用）。 */
+  /** 予定の由来定義の projectId（無ければ undefined）。 */
+  const projectOf = (item: PlacedItem): Id | undefined => {
+    const def = item.sourceId ? defById.get(item.sourceId) : undefined
+    return def && 'projectId' in def ? def.projectId : undefined
+  }
+
+  /** 対象日の配置予定（休憩を除く・カテゴリ/プロジェクト絞り込み適用）。 */
   const itemsOf = (date: string): PlacedItem[] => {
     const { timeline } = scheduleDay({ date, definitions, categories: categoryMap })
     return timeline.filter(
-      (i) => i.kind !== 'break' && (categoryFilter === '' || topOf(i.categoryId) === categoryFilter),
+      (i) =>
+        i.kind !== 'break' &&
+        (categoryFilter === '' || topOf(i.categoryId) === categoryFilter) &&
+        (projectFilter === '' || projectOf(i) === projectFilter),
     )
   }
 
@@ -114,6 +130,19 @@ export function CalendarView() {
             <option key={c.id} value={c.id}>{c.name}</option>
           ))}
         </select>
+        {/* プロジェクト絞り込みは通常モードのみ（§23.5 で最低限モードは隠す）。 */}
+        {!minimalMode && projects.length > 0 && (
+          <select
+            className="rounded border border-gray-300 px-2 py-1 text-sm dark:border-gray-600 dark:bg-gray-800"
+            value={projectFilter}
+            onChange={(e) => setProjectFilter(e.target.value)}
+          >
+            <option value="">すべてのプロジェクト</option>
+            {projects.map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+        )}
       </div>
 
       {view === 'week' ? (
