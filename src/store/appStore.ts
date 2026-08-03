@@ -12,6 +12,7 @@ import type {
   DailyReflection,
   Id,
   ScheduleDefinition,
+  WishlistItem,
 } from '../domain/types'
 import { createDexieRepository, type AppRepository } from '../data'
 
@@ -52,6 +53,8 @@ interface AppState {
   records: ActivityRecord[]
   /** 日次振り返り（§19）。 */
   reflections: DailyReflection[]
+  /** やりたいこと候補（§10）。 */
+  wishlist: WishlistItem[]
 
   /** 永続化層から全データを読み込む（初回は初期カテゴリを投入）。 */
   init(): Promise<void>
@@ -67,6 +70,10 @@ interface AppState {
   saveRecord(record: ActivityRecord): Promise<void>
   /** 日次振り返りを追加または更新して永続化する（§19）。 */
   saveReflection(reflection: DailyReflection): Promise<void>
+  /** やりたいこと候補を追加または更新する（§10）。 */
+  saveWishlistItem(item: WishlistItem): Promise<void>
+  /** やりたいこと候補を削除する。 */
+  removeWishlistItem(id: Id): Promise<void>
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -75,16 +82,18 @@ export const useAppStore = create<AppState>((set, get) => ({
   definitions: [],
   records: [],
   reflections: [],
+  wishlist: [],
 
   async init() {
     // 重複呼び出しは同じ Promise を返し、二重投入を防ぐ。
     if (initPromise) return initPromise
     initPromise = (async () => {
-      const [loadedCategories, definitions, records, reflections] = await Promise.all([
+      const [loadedCategories, definitions, records, reflections, wishlist] = await Promise.all([
         repository.categories.all(),
         repository.definitions.all(),
         repository.records.all(),
         repository.reflections.all(),
+        repository.wishlist.all(),
       ])
       // 初回のみ初期カテゴリを投入する（§8.1）。ID固定なので冪等。
       let categories = loadedCategories
@@ -92,7 +101,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         categories = buildDefaultCategories()
         await repository.categories.bulkPut(categories)
       }
-      set({ categories, definitions, records, reflections, loaded: true })
+      set({ categories, definitions, records, reflections, wishlist, loaded: true })
     })()
     return initPromise
   },
@@ -129,5 +138,16 @@ export const useAppStore = create<AppState>((set, get) => ({
     await repository.reflections.put(reflection)
     const rest = get().reflections.filter((r) => r.id !== reflection.id)
     set({ reflections: [...rest, reflection] })
+  },
+
+  async saveWishlistItem(item) {
+    await repository.wishlist.put(item)
+    const rest = get().wishlist.filter((w) => w.id !== item.id)
+    set({ wishlist: [...rest, item] })
+  },
+
+  async removeWishlistItem(id) {
+    await repository.wishlist.delete(id)
+    set({ wishlist: get().wishlist.filter((w) => w.id !== id) })
   },
 }))

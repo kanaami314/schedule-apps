@@ -10,12 +10,13 @@
  *   （締切の近い順に排他分類。1タスクは1つの期限バケットに入る）
  * - 未配置: 本日の既定稼働窓(07:00–23:00)で自動配置したとき置けなかったタスク（§16.6）。
  *   期限バケットとは重なる「警告リスト」として上部に表示する。
- * やりたいこと候補(§15) は wishlist の作成UIが未実装のため今回は対象外（[[project-status]]）。
+ * - やりたいこと候補(§10/§15): 名前だけを登録する候補。末尾に追加/一覧表示する。
  */
 
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import type { Category, FlexibleTask, Id } from '../../domain/types'
 import { scheduleDay } from '../../domain/scheduler/scheduleDay'
+import { newId } from '../../lib/ids'
 import { useAppStore } from '../../store/appStore'
 
 /** 〆切間近のしきい値（日）。既定3日（§15.1）。 */
@@ -51,6 +52,67 @@ function classify(task: FlexibleTask, now: number, today: string): Tier {
   if (h <= DEADLINE_NEAR_DAYS * 24) return 'near'
   if (h <= 7 * 24) return 'week'
   return 'later'
+}
+
+/** やりたいこと候補（§10）。名前だけを登録・一覧・削除する。 */
+function Wishlist() {
+  const wishlist = useAppStore((s) => s.wishlist)
+  const saveWishlistItem = useAppStore((s) => s.saveWishlistItem)
+  const removeWishlistItem = useAppStore((s) => s.removeWishlistItem)
+  const [name, setName] = useState('')
+
+  function add() {
+    const trimmed = name.trim()
+    if (!trimmed) return
+    void saveWishlistItem({ id: newId(), name: trimmed })
+    setName('')
+  }
+
+  return (
+    <div className="rounded-lg border border-gray-200 p-3 dark:border-gray-700">
+      <h4 className="mb-2 text-sm font-semibold text-gray-600 dark:text-gray-300">
+        やりたいこと候補
+        <span className="ml-1 text-xs text-gray-400">{wishlist.length}</span>
+      </h4>
+      <div className="mb-2 flex gap-2">
+        <input
+          className="flex-1 rounded border border-gray-300 px-2 py-1 text-sm dark:border-gray-600 dark:bg-gray-800"
+          placeholder="やってみたいこと"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && add()}
+        />
+        <button
+          className="rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-40"
+          disabled={name.trim() === ''}
+          onClick={add}
+        >
+          追加
+        </button>
+      </div>
+      {wishlist.length === 0 ? (
+        <p className="text-xs text-gray-400">候補がありません。</p>
+      ) : (
+        <ul className="flex flex-wrap gap-1">
+          {wishlist.map((w) => (
+            <li
+              key={w.id}
+              className="flex items-center gap-1 rounded bg-gray-100 px-2 py-0.5 text-sm dark:bg-gray-700"
+            >
+              <span>{w.name}</span>
+              <button
+                className="text-xs text-gray-400 hover:text-red-600"
+                onClick={() => removeWishlistItem(w.id)}
+                aria-label={`${w.name} を削除`}
+              >
+                ×
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
 }
 
 export function TaskList() {
@@ -95,7 +157,12 @@ export function TaskList() {
 
   const total = buckets.reduce((n, b) => n + b.tasks.length, 0)
   if (total === 0) {
-    return <p className="text-sm text-gray-500">柔軟なタスクがありません。</p>
+    return (
+      <div className="space-y-4">
+        <p className="text-sm text-gray-500">柔軟なタスクがありません。</p>
+        <Wishlist />
+      </div>
+    )
   }
 
   return (
@@ -149,6 +216,8 @@ export function TaskList() {
           </div>
         ))}
       </div>
+
+      <Wishlist />
     </div>
   )
 }
