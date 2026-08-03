@@ -11,6 +11,7 @@
 import type {
   ActivityRecord,
   Category,
+  DailyReflection,
   Id,
   LongTermGoal,
   Project,
@@ -46,4 +47,6 @@ export interface AppRepository {
   wishlist: Collection<WishlistItem>
   /** 実績記録（§14）。 */
   records: Collection<ActivityRecord>
+  /** 日次振り返り（§19）。 */
+  reflections: Collection<DailyReflection>
 }

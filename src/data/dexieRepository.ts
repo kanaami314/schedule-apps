@@ -50,5 +50,6 @@ export function createDexieRepository(database: AppDatabase = defaultDb): AppRep
     tags: new TableCollection(database.tags),
     wishlist: new TableCollection(database.wishlist),
     records: new TableCollection(database.records),
+    reflections: new TableCollection(database.reflections),
   }
 }

@@ -6,7 +6,13 @@
  */
 
 import { create } from 'zustand'
-import type { ActivityRecord, Category, Id, ScheduleDefinition } from '../domain/types'
+import type {
+  ActivityRecord,
+  Category,
+  DailyReflection,
+  Id,
+  ScheduleDefinition,
+} from '../domain/types'
 import { createDexieRepository, type AppRepository } from '../data'
 
 const repository: AppRepository = createDexieRepository()
@@ -44,6 +50,8 @@ interface AppState {
   definitions: ScheduleDefinition[]
   /** 実績記録（§14）。 */
   records: ActivityRecord[]
+  /** 日次振り返り（§19）。 */
+  reflections: DailyReflection[]
 
   /** 永続化層から全データを読み込む（初回は初期カテゴリを投入）。 */
   init(): Promise<void>
@@ -57,6 +65,8 @@ interface AppState {
   removeCategory(id: Id): Promise<void>
   /** 実績記録を追加または更新して永続化する（§14）。 */
   saveRecord(record: ActivityRecord): Promise<void>
+  /** 日次振り返りを追加または更新して永続化する（§19）。 */
+  saveReflection(reflection: DailyReflection): Promise<void>
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -64,15 +74,17 @@ export const useAppStore = create<AppState>((set, get) => ({
   categories: [],
   definitions: [],
   records: [],
+  reflections: [],
 
   async init() {
     // 重複呼び出しは同じ Promise を返し、二重投入を防ぐ。
     if (initPromise) return initPromise
     initPromise = (async () => {
-      const [loadedCategories, definitions, records] = await Promise.all([
+      const [loadedCategories, definitions, records, reflections] = await Promise.all([
         repository.categories.all(),
         repository.definitions.all(),
         repository.records.all(),
+        repository.reflections.all(),
       ])
       // 初回のみ初期カテゴリを投入する（§8.1）。ID固定なので冪等。
       let categories = loadedCategories
@@ -80,7 +92,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         categories = buildDefaultCategories()
         await repository.categories.bulkPut(categories)
       }
-      set({ categories, definitions, records, loaded: true })
+      set({ categories, definitions, records, reflections, loaded: true })
     })()
     return initPromise
   },
@@ -111,5 +123,11 @@ export const useAppStore = create<AppState>((set, get) => ({
     await repository.records.put(record)
     const rest = get().records.filter((r) => r.id !== record.id)
     set({ records: [...rest, record] })
+  },
+
+  async saveReflection(reflection) {
+    await repository.reflections.put(reflection)
+    const rest = get().reflections.filter((r) => r.id !== reflection.id)
+    set({ reflections: [...rest, reflection] })
   },
 }))
