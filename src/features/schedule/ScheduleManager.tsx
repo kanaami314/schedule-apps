@@ -12,6 +12,7 @@ import { LoadFields } from './LoadFields'
 import { DEFAULT_LOAD, fromLoadProfile, toLoadProfile, type LoadValue } from './loadValue'
 import { CategorySelect } from './CategorySelect'
 import { RoutineForm } from './RoutineForm'
+import { FreeActivityForm } from './FreeActivityForm'
 
 const cancelButtonClass =
   'rounded border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800'
@@ -338,6 +339,7 @@ export function ScheduleManager() {
       <div className="space-y-4">
         <FixedEventForm editing={editing} onDone={() => setEditing(null)} />
         <FlexibleTaskForm editing={editing} onDone={() => setEditing(null)} />
+        <FreeActivityForm />
         <RoutineForm />
       </div>
       <div>
