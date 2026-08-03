@@ -7,6 +7,7 @@ import { TaskList } from './features/schedule/TaskList'
 import { Home } from './features/schedule/Home'
 import { Reflection } from './features/schedule/Reflection'
 import { BalanceAnalysis } from './features/schedule/BalanceAnalysis'
+import { CalendarView } from './features/schedule/CalendarView'
 
 function App() {
   const init = useAppStore((s) => s.init)
@@ -40,6 +41,10 @@ function App() {
           <section>
             <h2 className="mb-3 text-lg font-semibold">自動スケジュール</h2>
             <DaySchedule />
+          </section>
+          <section>
+            <h2 className="mb-3 text-lg font-semibold">カレンダー</h2>
+            <CalendarView />
           </section>
           <section>
             <h2 className="mb-3 text-lg font-semibold">日次振り返り</h2>
