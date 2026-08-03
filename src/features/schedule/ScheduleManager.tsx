@@ -95,6 +95,9 @@ function FixedEventForm({ editing, onDone }: EditFormProps) {
   const [load, setLoad] = useState<LoadValue>(DEFAULT_LOAD)
   const [repeatKind, setRepeatKind] = useState<RepeatKind>('none')
   const [weekdays, setWeekdays] = useState<Weekday[]>([])
+  const [travelMin, setTravelMin] = useState(0)
+  const [prepMin, setPrepMin] = useState(0)
+  const [bufferMin, setBufferMin] = useState(0)
 
   // 編集対象が変わったらフォームへ読み込む。
   useEffect(() => {
@@ -108,6 +111,9 @@ function FixedEventForm({ editing, onDone }: EditFormProps) {
     const r = target.repeat
     setRepeatKind(r?.kind ?? 'none')
     setWeekdays(r && (r.kind === 'weekly' || r.kind === 'biweekly') ? [...r.weekdays] : [])
+    setTravelMin(target.travelTime?.duration ?? 0)
+    setPrepMin(target.prepTime?.duration ?? 0)
+    setBufferMin(target.bufferTime?.duration ?? 0)
   }, [target])
 
   const needsWeekdays = repeatKind === 'weekly' || repeatKind === 'biweekly'
@@ -128,6 +134,9 @@ function FixedEventForm({ editing, onDone }: EditFormProps) {
     setLoad(DEFAULT_LOAD)
     setRepeatKind('none')
     setWeekdays([])
+    setTravelMin(0)
+    setPrepMin(0)
+    setBufferMin(0)
   }
 
   function toggleWeekday(day: Weekday) {
@@ -166,6 +175,10 @@ function FixedEventForm({ editing, onDone }: EditFormProps) {
       categoryId: categoryId || undefined,
       load: toLoadProfile(load),
       repeat: buildRepeat(),
+      // 付随時間（§4.4）。フォーム入力は兼用不可（占有）として扱う。
+      travelTime: travelMin > 0 ? { duration: travelMin } : undefined,
+      prepTime: prepMin > 0 ? { duration: prepMin } : undefined,
+      bufferTime: bufferMin > 0 ? { duration: bufferMin } : undefined,
     }
     await saveDefinition(event)
     reset()
@@ -232,6 +245,41 @@ function FixedEventForm({ editing, onDone }: EditFormProps) {
               <WeekdayPicker selected={weekdays} onToggle={toggleWeekday} />
             </div>
           )}
+        </div>
+        <div>
+          <label className={labelClass}>付随時間（分, §4.4）</label>
+          <div className="flex gap-2">
+            <div className="flex-1">
+              <span className="text-[10px] text-gray-400">移動</span>
+              <input
+                type="number"
+                min={0}
+                className={inputClass}
+                value={travelMin}
+                onChange={(e) => setTravelMin(Number(e.target.value))}
+              />
+            </div>
+            <div className="flex-1">
+              <span className="text-[10px] text-gray-400">準備</span>
+              <input
+                type="number"
+                min={0}
+                className={inputClass}
+                value={prepMin}
+                onChange={(e) => setPrepMin(Number(e.target.value))}
+              />
+            </div>
+            <div className="flex-1">
+              <span className="text-[10px] text-gray-400">終了後</span>
+              <input
+                type="number"
+                min={0}
+                className={inputClass}
+                value={bufferMin}
+                onChange={(e) => setBufferMin(Number(e.target.value))}
+              />
+            </div>
+          </div>
         </div>
         <CategorySelect value={categoryId} onChange={setCategoryId} />
         <LoadFields value={load} onChange={setLoad} />

@@ -50,6 +50,54 @@ describe('scheduleDay', () => {
     expect(starts).toEqual([...starts].sort((a, b) => a - b))
   })
 
+  it('付随時間（準備・移動・終了後余裕）を占有し、他タスクを押し出す（§4.4）', () => {
+    // 会議 10:00-11:00 に、移動30分+準備15分（前=45分）、終了後余裕30分（後）。
+    // 占有は 9:15-11:30。9:00-12:00 窓では 60分タスクは前(9:00-9:15=15分)に入らず、
+    // 後ろ(11:30-12:00=30分)にも入らないため未配置になる。
+    const result = scheduleDay({
+      date: DATE,
+      categories: noCategories,
+      window: { start: 540, end: 720 }, // 9:00-12:00
+      definitions: [
+        fixed({
+          id: 'meeting',
+          start: '10:00',
+          end: '11:00',
+          travelTime: { duration: 30 },
+          prepTime: { duration: 15 },
+          bufferTime: { duration: 30 },
+        }),
+        flex({ id: 'task', estimatedDuration: 60, splittable: false }),
+      ],
+    })
+    // 予定枠は本体時間のまま。
+    const meeting = result.timeline.find((t) => t.sourceId === 'meeting')
+    expect(meeting?.interval).toEqual({ start: 600, end: 660 })
+    // 付随時間の占有で 60分タスクは入らない。
+    expect(result.unplaced.map((u) => u.task.id)).toContain('task')
+  })
+
+  it('兼用可(shareable)の付随時間は占有に含めない（§4.4）', () => {
+    const result = scheduleDay({
+      date: DATE,
+      categories: noCategories,
+      window: { start: 540, end: 720 },
+      definitions: [
+        fixed({
+          id: 'meeting',
+          start: '10:00',
+          end: '11:00',
+          prepTime: { duration: 60, shareable: true }, // 兼用可 → 占有しない
+        }),
+        flex({ id: 'task', estimatedDuration: 60, splittable: false }),
+      ],
+    })
+    // 兼用可なので前の 9:00-10:00 に 60分タスクが入る。
+    const task = result.timeline.find((t) => t.sourceId === 'task')
+    expect(task?.interval).toEqual({ start: 540, end: 600 })
+    expect(result.unplaced).toHaveLength(0)
+  })
+
   it('高負荷が連続すると休憩が挿入される', () => {
     // (3,3,3) の固定2時間 + 高負荷タスクで 6.0 を超え、直後の空きに休憩
     const result = scheduleDay({

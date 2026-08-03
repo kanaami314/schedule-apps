@@ -14,7 +14,7 @@
  */
 
 import type { Category, Id, IsoDate, IsoDateTime, Minutes, ResolvedLoad, Weekday } from '../types'
-import type { LifeRoutine, RoutineType, ScheduleDefinition } from '../types'
+import type { AncillaryTime, FixedEvent, LifeRoutine, RoutineType, ScheduleDefinition } from '../types'
 import { resolveLoad } from '../load/inheritance'
 import type { LoadSegment } from '../load/continuous'
 import type { RecoveryIntervalType } from '../load/recovery'
@@ -58,6 +58,22 @@ function weekdayOf(date: IsoDate): Weekday {
   return new Date(`${date}T00:00`).getDay() as Weekday
 }
 
+/** 兼用可でない付随時間の分数（兼用可・未設定は0）。 */
+function reserved(ancillary: AncillaryTime | undefined): Minutes {
+  return ancillary && !ancillary.shareable ? ancillary.duration : 0
+}
+
+/**
+ * 固定予定の占有区間（§4.4）。予定本体の前に「移動＋準備」、後に「終了後の余裕」を
+ * 兼用不可のぶんだけ確保する。兼用可(shareable)の付随時間は占有に加えない。
+ * 表示上の予定枠は本体時間のままとし、この占有は他予定の配置衝突判定にのみ使う。
+ */
+function occupancyInterval(fixed: FixedEvent, base: Interval): Interval {
+  const before = reserved(fixed.travelTime) + reserved(fixed.prepTime)
+  const after = reserved(fixed.bufferTime)
+  return { start: base.start - before, end: base.end + after }
+}
+
 /** 生活ルーチンの各回を実行可能時間帯へ配置する（§7）。配置できた区間の配列を返す。 */
 function placeRoutines(
   routines: readonly LifeRoutine[],
@@ -97,26 +113,24 @@ export function scheduleDay(options: ScheduleDayOptions): ScheduleDayResult {
   const weekday = weekdayOf(options.date)
 
   // 1. 固定予定（対象日に出現するもの）を占有として確定。繰り返しは基準日から展開（§4.3）。
-  const fixedPlacements: PlacedItem[] = options.definitions
-    .filter(
-      (d): d is Extract<ScheduleDefinition, { kind: 'fixed' }> =>
-        d.kind === 'fixed' && occursOn(d.date, d.repeat, options.date),
-    )
-    .map((d) => {
-      const fixed = d as Extract<ScheduleDefinition, { kind: 'fixed' }>
-      return {
-        id: fixed.id,
-        sourceId: fixed.id,
-        kind: 'fixed' as const,
-        interval: { start: timeToMinutes(fixed.time.start), end: timeToMinutes(fixed.time.end) },
-        movable: false,
-        load: resolveLoad(fixed.load, fixed.categoryId, options.categories),
-        categoryId: fixed.categoryId,
-        label: fixed.name,
-      }
-    })
+  const fixedDefs: FixedEvent[] = options.definitions.filter(
+    (d): d is FixedEvent => d.kind === 'fixed' && occursOn(d.date, d.repeat, options.date),
+  )
+  const fixedPlacements: PlacedItem[] = fixedDefs.map((fixed) => ({
+    id: fixed.id,
+    sourceId: fixed.id,
+    kind: 'fixed' as const,
+    interval: { start: timeToMinutes(fixed.time.start), end: timeToMinutes(fixed.time.end) },
+    movable: false,
+    load: resolveLoad(fixed.load, fixed.categoryId, options.categories),
+    categoryId: fixed.categoryId,
+    label: fixed.name,
+  }))
 
-  const busy: Interval[] = fixedPlacements.map((p) => p.interval)
+  // 他予定の配置には、付随時間（準備・移動・終了後余裕）を含む占有区間を使う（§4.4）。
+  const busy: Interval[] = fixedDefs.map((fixed, i) =>
+    occupancyInterval(fixed, fixedPlacements[i].interval),
+  )
 
   // 2. 生活ルーチンを配置（固定の次に優先, §3）。busy を更新する。
   const routines = options.definitions.filter(
