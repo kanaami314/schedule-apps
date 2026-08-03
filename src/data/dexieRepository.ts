@@ -49,5 +49,6 @@ export function createDexieRepository(database: AppDatabase = defaultDb): AppRep
     goals: new TableCollection(database.goals),
     tags: new TableCollection(database.tags),
     wishlist: new TableCollection(database.wishlist),
+    records: new TableCollection(database.records),
   }
 }

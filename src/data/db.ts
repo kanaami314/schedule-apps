@@ -7,6 +7,7 @@
 
 import Dexie, { type Table } from 'dexie'
 import type {
+  ActivityRecord,
   Category,
   Id,
   LongTermGoal,
@@ -23,6 +24,7 @@ export class AppDatabase extends Dexie {
   goals!: Table<LongTermGoal, Id>
   tags!: Table<Tag, Id>
   wishlist!: Table<WishlistItem, Id>
+  records!: Table<ActivityRecord, Id>
 
   constructor(name = 'schedule-app') {
     super(name)
@@ -36,6 +38,10 @@ export class AppDatabase extends Dexie {
       goals: 'id',
       tags: 'id',
       wishlist: 'id',
+    })
+    // v2: 実績記録テーブルを追加（§14）。date/sourceid で絞り込み可能に。
+    this.version(2).stores({
+      records: 'id, date, sourceId',
     })
   }
 }

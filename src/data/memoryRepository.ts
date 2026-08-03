@@ -44,5 +44,6 @@ export function createMemoryRepository(): AppRepository {
     goals: new MapCollection(),
     tags: new MapCollection(),
     wishlist: new MapCollection(),
+    records: new MapCollection(),
   }
 }

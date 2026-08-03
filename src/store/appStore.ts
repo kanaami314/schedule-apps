@@ -6,7 +6,7 @@
  */
 
 import { create } from 'zustand'
-import type { Category, Id, ScheduleDefinition } from '../domain/types'
+import type { ActivityRecord, Category, Id, ScheduleDefinition } from '../domain/types'
 import { createDexieRepository, type AppRepository } from '../data'
 
 const repository: AppRepository = createDexieRepository()
@@ -42,6 +42,8 @@ interface AppState {
   loaded: boolean
   categories: Category[]
   definitions: ScheduleDefinition[]
+  /** 実績記録（§14）。 */
+  records: ActivityRecord[]
 
   /** 永続化層から全データを読み込む（初回は初期カテゴリを投入）。 */
   init(): Promise<void>
@@ -53,20 +55,24 @@ interface AppState {
   saveCategory(category: Category): Promise<void>
   /** カテゴリを削除する。 */
   removeCategory(id: Id): Promise<void>
+  /** 実績記録を追加または更新して永続化する（§14）。 */
+  saveRecord(record: ActivityRecord): Promise<void>
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
   loaded: false,
   categories: [],
   definitions: [],
+  records: [],
 
   async init() {
     // 重複呼び出しは同じ Promise を返し、二重投入を防ぐ。
     if (initPromise) return initPromise
     initPromise = (async () => {
-      const [loadedCategories, definitions] = await Promise.all([
+      const [loadedCategories, definitions, records] = await Promise.all([
         repository.categories.all(),
         repository.definitions.all(),
+        repository.records.all(),
       ])
       // 初回のみ初期カテゴリを投入する（§8.1）。ID固定なので冪等。
       let categories = loadedCategories
@@ -74,7 +80,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         categories = buildDefaultCategories()
         await repository.categories.bulkPut(categories)
       }
-      set({ categories, definitions, loaded: true })
+      set({ categories, definitions, records, loaded: true })
     })()
     return initPromise
   },
@@ -99,5 +105,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   async removeCategory(id) {
     await repository.categories.delete(id)
     set({ categories: get().categories.filter((c) => c.id !== id) })
+  },
+
+  async saveRecord(record) {
+    await repository.records.put(record)
+    const rest = get().records.filter((r) => r.id !== record.id)
+    set({ records: [...rest, record] })
   },
 }))

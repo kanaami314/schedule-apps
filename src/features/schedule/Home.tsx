@@ -4,12 +4,16 @@
  * - 次の予定: 予定名・開始/終了時刻。現在よりやや目立たせる（§21.2）
  * - 現在/次の予定に開始アクション、実行中の予定に完了アクションを提供（§21）
  *
- * 開始/完了は当面コンポーネント内の一時状態で保持する。実績としての永続化は
- * §14（完了・実績の記録）で扱う予定（[[project-status]]）。
+ * 開始/完了は実績記録（§14）として永続化する:
+ * - 開始アクション → 実際の開始時刻を記録し `started`（§14.1）
+ * - 完了アクション → 実際の終了時刻を記録し `completed`（§14.2）
+ * 完了済みの予定は現在/次の候補から除外する。
+ * 未完了申告・再スケジューリング（§14.3）は今後対応（[[project-status]]）。
  */
 
 import { useEffect, useMemo, useState } from 'react'
-import type { Category, Id } from '../../domain/types'
+import type { ActivityRecord, Category, Id } from '../../domain/types'
+import { recordId } from '../../domain/types'
 import { minutesToTime } from '../../domain/scheduler/intervals'
 import { scheduleDay } from '../../domain/scheduler/scheduleDay'
 import type { PlacedItem } from '../../domain/scheduler/placement'
@@ -26,16 +30,21 @@ const KIND_LABEL: Record<PlacedItem['kind'], string> = {
   break: '休憩',
 }
 
-function todayIso(now: Date): string {
-  const p = (n: number) => String(n).padStart(2, '0')
-  return `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}`
+const pad = (n: number) => String(n).padStart(2, '0')
+
+function isoDate(now: Date): string {
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
 }
 
-type RunStatus = 'started' | 'done'
+function isoDateTime(now: Date): string {
+  return `${isoDate(now)}T${pad(now.getHours())}:${pad(now.getMinutes())}`
+}
 
 export function Home() {
   const definitions = useAppStore((s) => s.definitions)
   const categories = useAppStore((s) => s.categories)
+  const records = useAppStore((s) => s.records)
+  const saveRecord = useAppStore((s) => s.saveRecord)
 
   // 1分ごとに現在時刻を更新して表示を最新に保つ。
   const [nowMs, setNowMs] = useState(() => Date.now())
@@ -44,20 +53,24 @@ export function Home() {
     return () => clearInterval(id)
   }, [])
 
-  // 開始/完了の一時状態（配置IDごと）。§14 で永続化予定。
-  const [status, setStatus] = useState<Record<string, RunStatus>>({})
-
   const categoryMap = useMemo(
     () => new Map<Id, Category>(categories.map((c) => [c.id, c])),
     [categories],
   )
 
+  const now = useMemo(() => new Date(nowMs), [nowMs])
+  const date = isoDate(now)
+  const nowMin = now.getHours() * 60 + now.getMinutes()
+
+  // 今日の実績を配置ブロックIDで引けるようにする。
+  const recordByItem = useMemo(() => {
+    const map = new Map<string, ActivityRecord>()
+    for (const r of records) if (r.date === date) map.set(r.itemId, r)
+    return map
+  }, [records, date])
+
   const { current, next } = useMemo(() => {
-    const now = new Date(nowMs)
-    const date = todayIso(now)
-    const nowMin = now.getHours() * 60 + now.getMinutes()
-    const p = (n: number) => String(n).padStart(2, '0')
-    const referenceTime = `${date}T${p(now.getHours())}:${p(now.getMinutes())}`
+    const referenceTime = isoDateTime(now)
     const { timeline } = scheduleDay({
       date,
       definitions,
@@ -65,8 +78,8 @@ export function Home() {
       window: HOME_WINDOW,
       referenceTime,
     })
-    // 完了済みは対象から除く。休憩は開始/完了アクションの対象外。
-    const items = timeline.filter((i) => status[i.id] !== 'done')
+    // 完了済みは対象から除く。
+    const items = timeline.filter((i) => recordByItem.get(i.id)?.status !== 'completed')
     const current = items.find(
       (i) => i.interval.start <= nowMin && nowMin < i.interval.end,
     )
@@ -74,14 +87,39 @@ export function Home() {
       .filter((i) => i.interval.start > nowMin)
       .sort((a, b) => a.interval.start - b.interval.start)[0]
     return { current, next }
-  }, [nowMs, definitions, categoryMap, status])
+  }, [now, date, nowMin, definitions, categoryMap, recordByItem])
 
-  function start(id: string) {
-    setStatus((s) => ({ ...s, [id]: 'started' }))
+  function start(item: PlacedItem) {
+    const at = isoDateTime(new Date())
+    void saveRecord({
+      id: recordId(date, item.id),
+      date,
+      itemId: item.id,
+      sourceId: item.sourceId ?? item.id,
+      status: 'started',
+      actualStart: at,
+      createdAt: at,
+      updatedAt: at,
+    })
   }
-  function complete(id: string) {
-    setStatus((s) => ({ ...s, [id]: 'done' }))
+
+  function complete(item: PlacedItem) {
+    const at = isoDateTime(new Date())
+    const existing = recordByItem.get(item.id)
+    void saveRecord({
+      id: recordId(date, item.id),
+      date,
+      itemId: item.id,
+      sourceId: item.sourceId ?? item.id,
+      status: 'completed',
+      actualStart: existing?.actualStart,
+      actualEnd: at,
+      createdAt: existing?.createdAt ?? at,
+      updatedAt: at,
+    })
   }
+
+  const currentStatus = current ? recordByItem.get(current.id)?.status : undefined
 
   return (
     <div className="grid gap-4 sm:grid-cols-2">
@@ -95,26 +133,26 @@ export function Home() {
               {KIND_LABEL[current.kind]} · 〜{minutesToTime(current.interval.end)} 終了
             </p>
             {current.kind !== 'break' && (
-              <div className="mt-3">
-                {status[current.id] === 'started' ? (
-                  <button
-                    className="rounded bg-gray-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800"
-                    onClick={() => complete(current.id)}
-                  >
-                    完了にする
-                  </button>
+              <div className="mt-3 flex items-center gap-2">
+                {currentStatus === 'started' ? (
+                  <>
+                    <button
+                      className="rounded bg-gray-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800"
+                      onClick={() => complete(current)}
+                    >
+                      完了にする
+                    </button>
+                    <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                      実行中
+                    </span>
+                  </>
                 ) : (
                   <button
                     className="rounded bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700"
-                    onClick={() => start(current.id)}
+                    onClick={() => start(current)}
                   >
                     開始する
                   </button>
-                )}
-                {status[current.id] === 'started' && (
-                  <span className="ml-2 text-xs font-medium text-emerald-600 dark:text-emerald-400">
-                    実行中
-                  </span>
                 )}
               </div>
             )}
@@ -134,11 +172,11 @@ export function Home() {
               {KIND_LABEL[next.kind]} · {minutesToTime(next.interval.start)}〜
               {minutesToTime(next.interval.end)}
             </p>
-            {next.kind !== 'break' && status[next.id] !== 'started' && (
+            {next.kind !== 'break' && recordByItem.get(next.id)?.status !== 'started' && (
               <div className="mt-3">
                 <button
                   className="rounded bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700"
-                  onClick={() => start(next.id)}
+                  onClick={() => start(next)}
                 >
                   開始する
                 </button>

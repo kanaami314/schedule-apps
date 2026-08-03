@@ -9,6 +9,7 @@
  */
 
 import type {
+  ActivityRecord,
   Category,
   Id,
   LongTermGoal,
@@ -43,4 +44,6 @@ export interface AppRepository {
   goals: Collection<LongTermGoal>
   tags: Collection<Tag>
   wishlist: Collection<WishlistItem>
+  /** 実績記録（§14）。 */
+  records: Collection<ActivityRecord>
 }
