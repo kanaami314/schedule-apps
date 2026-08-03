@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useAppStore } from './store/appStore'
 import { ScheduleManager } from './features/schedule/ScheduleManager'
 import { DaySchedule } from './features/schedule/DaySchedule'
@@ -12,19 +12,66 @@ import { GoalProjectManager } from './features/schedule/GoalProjectManager'
 import { NotificationCenter } from './features/schedule/NotificationCenter'
 import { TagManager } from './features/schedule/TagManager'
 
+/** 選択中タブの永続化キー。 */
+const TAB_KEY = 'schedule-app.activeTab'
+
+type TabKey = 'home' | 'plans' | 'tasks' | 'schedule' | 'review' | 'settings'
+
+function loadTab(): TabKey {
+  try {
+    const v = localStorage.getItem(TAB_KEY)
+    if (v && ['home', 'plans', 'tasks', 'schedule', 'review', 'settings'].includes(v)) {
+      return v as TabKey
+    }
+  } catch {
+    // ignore
+  }
+  return 'home'
+}
+
+/** セクション見出し付きのラッパ。 */
+function Section({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section>
+      <h2 className="mb-3 text-lg font-semibold">{title}</h2>
+      {children}
+    </section>
+  )
+}
+
 function App() {
   const init = useAppStore((s) => s.init)
   const loaded = useAppStore((s) => s.loaded)
   const minimalMode = useAppStore((s) => s.minimalMode)
   const setMinimalMode = useAppStore((s) => s.setMinimalMode)
 
+  const [tab, setTab] = useState<TabKey>(loadTab)
+
   useEffect(() => {
     void init()
   }, [init])
 
+  function selectTab(next: TabKey) {
+    setTab(next)
+    try {
+      localStorage.setItem(TAB_KEY, next)
+    } catch {
+      // ignore
+    }
+  }
+
+  const tabs: { key: TabKey; label: string }[] = [
+    { key: 'home', label: 'ホーム' },
+    { key: 'plans', label: '予定' },
+    { key: 'tasks', label: 'タスク' },
+    { key: 'schedule', label: 'スケジュール' },
+    { key: 'review', label: '振り返り・分析' },
+    { key: 'settings', label: '分類・設定' },
+  ]
+
   return (
     <div className="mx-auto max-w-4xl p-6">
-      <header className="mb-6 flex items-start justify-between gap-4">
+      <header className="mb-4 flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">タイムスケジューラ</h1>
           <p className="text-sm text-gray-500">予定を登録すると IndexedDB に保存されます。</p>
@@ -38,54 +85,91 @@ function App() {
           最低限モード
         </label>
       </header>
+
       {loaded ? (
-        <div className="space-y-8">
-          <section>
-            <h2 className="mb-3 text-lg font-semibold">ホーム</h2>
-            <Home />
-          </section>
-          <section>
-            <h2 className="mb-3 text-lg font-semibold">通知</h2>
-            <NotificationCenter />
-          </section>
-          <ScheduleManager />
-          <section>
-            <h2 className="mb-3 text-lg font-semibold">カテゴリ</h2>
-            <CategoryManager />
-          </section>
-          {!minimalMode && (
-            <section>
-              <h2 className="mb-3 text-lg font-semibold">長期目標・プロジェクト</h2>
-              <GoalProjectManager />
-            </section>
-          )}
-          {!minimalMode && (
-            <section>
-              <h2 className="mb-3 text-lg font-semibold">タグ</h2>
-              <TagManager />
-            </section>
-          )}
-          <section>
-            <h2 className="mb-3 text-lg font-semibold">タスク一覧</h2>
-            <TaskList />
-          </section>
-          <section>
-            <h2 className="mb-3 text-lg font-semibold">自動スケジュール</h2>
-            <DaySchedule />
-          </section>
-          <section>
-            <h2 className="mb-3 text-lg font-semibold">カレンダー</h2>
-            <CalendarView />
-          </section>
-          <section>
-            <h2 className="mb-3 text-lg font-semibold">日次振り返り</h2>
-            <Reflection />
-          </section>
-          <section>
-            <h2 className="mb-3 text-lg font-semibold">バランス分析</h2>
-            <BalanceAnalysis />
-          </section>
-        </div>
+        <>
+          {/* タブバー */}
+          <nav className="mb-6 flex flex-wrap gap-1 border-b border-gray-200 dark:border-gray-700">
+            {tabs.map((t) => (
+              <button
+                key={t.key}
+                onClick={() => selectTab(t.key)}
+                className={`-mb-px rounded-t border-b-2 px-3 py-2 text-sm font-medium ${
+                  tab === t.key
+                    ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </nav>
+
+          <div className="space-y-8">
+            {tab === 'home' && (
+              <>
+                <Section title="ホーム">
+                  <Home />
+                </Section>
+                <Section title="通知">
+                  <NotificationCenter />
+                </Section>
+              </>
+            )}
+
+            {tab === 'plans' && (
+              <Section title="予定の作成・編集">
+                <ScheduleManager />
+              </Section>
+            )}
+
+            {tab === 'tasks' && (
+              <Section title="タスク一覧">
+                <TaskList />
+              </Section>
+            )}
+
+            {tab === 'schedule' && (
+              <>
+                <Section title="自動スケジュール">
+                  <DaySchedule />
+                </Section>
+                <Section title="カレンダー">
+                  <CalendarView />
+                </Section>
+              </>
+            )}
+
+            {tab === 'review' && (
+              <>
+                <Section title="日次振り返り">
+                  <Reflection />
+                </Section>
+                <Section title="バランス分析">
+                  <BalanceAnalysis />
+                </Section>
+              </>
+            )}
+
+            {tab === 'settings' && (
+              <>
+                <Section title="カテゴリ">
+                  <CategoryManager />
+                </Section>
+                {!minimalMode && (
+                  <Section title="長期目標・プロジェクト">
+                    <GoalProjectManager />
+                  </Section>
+                )}
+                {!minimalMode && (
+                  <Section title="タグ">
+                    <TagManager />
+                  </Section>
+                )}
+              </>
+            )}
+          </div>
+        </>
       ) : (
         <p className="text-gray-500">読み込み中…</p>
       )}
