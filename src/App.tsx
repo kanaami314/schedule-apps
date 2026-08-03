@@ -8,6 +8,7 @@ import { Home } from './features/schedule/Home'
 import { Reflection } from './features/schedule/Reflection'
 import { BalanceAnalysis } from './features/schedule/BalanceAnalysis'
 import { CalendarView } from './features/schedule/CalendarView'
+import { GoalProjectManager } from './features/schedule/GoalProjectManager'
 
 function App() {
   const init = useAppStore((s) => s.init)
@@ -33,6 +34,10 @@ function App() {
           <section>
             <h2 className="mb-3 text-lg font-semibold">カテゴリ</h2>
             <CategoryManager />
+          </section>
+          <section>
+            <h2 className="mb-3 text-lg font-semibold">長期目標・プロジェクト</h2>
+            <GoalProjectManager />
           </section>
           <section>
             <h2 className="mb-3 text-lg font-semibold">タスク一覧</h2>

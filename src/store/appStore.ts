@@ -11,6 +11,8 @@ import type {
   Category,
   DailyReflection,
   Id,
+  LongTermGoal,
+  Project,
   ScheduleDefinition,
   WishlistItem,
 } from '../domain/types'
@@ -55,6 +57,10 @@ interface AppState {
   reflections: DailyReflection[]
   /** やりたいこと候補（§10）。 */
   wishlist: WishlistItem[]
+  /** 長期目標（§9）。 */
+  goals: LongTermGoal[]
+  /** プロジェクト（§9）。 */
+  projects: Project[]
 
   /** 永続化層から全データを読み込む（初回は初期カテゴリを投入）。 */
   init(): Promise<void>
@@ -74,6 +80,14 @@ interface AppState {
   saveWishlistItem(item: WishlistItem): Promise<void>
   /** やりたいこと候補を削除する。 */
   removeWishlistItem(id: Id): Promise<void>
+  /** 長期目標を追加または更新する（§9）。 */
+  saveGoal(goal: LongTermGoal): Promise<void>
+  /** 長期目標を削除する。 */
+  removeGoal(id: Id): Promise<void>
+  /** プロジェクトを追加または更新する（§9）。 */
+  saveProject(project: Project): Promise<void>
+  /** プロジェクトを削除する。 */
+  removeProject(id: Id): Promise<void>
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -83,25 +97,30 @@ export const useAppStore = create<AppState>((set, get) => ({
   records: [],
   reflections: [],
   wishlist: [],
+  goals: [],
+  projects: [],
 
   async init() {
     // 重複呼び出しは同じ Promise を返し、二重投入を防ぐ。
     if (initPromise) return initPromise
     initPromise = (async () => {
-      const [loadedCategories, definitions, records, reflections, wishlist] = await Promise.all([
-        repository.categories.all(),
-        repository.definitions.all(),
-        repository.records.all(),
-        repository.reflections.all(),
-        repository.wishlist.all(),
-      ])
+      const [loadedCategories, definitions, records, reflections, wishlist, goals, projects] =
+        await Promise.all([
+          repository.categories.all(),
+          repository.definitions.all(),
+          repository.records.all(),
+          repository.reflections.all(),
+          repository.wishlist.all(),
+          repository.goals.all(),
+          repository.projects.all(),
+        ])
       // 初回のみ初期カテゴリを投入する（§8.1）。ID固定なので冪等。
       let categories = loadedCategories
       if (categories.length === 0) {
         categories = buildDefaultCategories()
         await repository.categories.bulkPut(categories)
       }
-      set({ categories, definitions, records, reflections, wishlist, loaded: true })
+      set({ categories, definitions, records, reflections, wishlist, goals, projects, loaded: true })
     })()
     return initPromise
   },
@@ -149,5 +168,27 @@ export const useAppStore = create<AppState>((set, get) => ({
   async removeWishlistItem(id) {
     await repository.wishlist.delete(id)
     set({ wishlist: get().wishlist.filter((w) => w.id !== id) })
+  },
+
+  async saveGoal(goal) {
+    await repository.goals.put(goal)
+    const rest = get().goals.filter((g) => g.id !== goal.id)
+    set({ goals: [...rest, goal] })
+  },
+
+  async removeGoal(id) {
+    await repository.goals.delete(id)
+    set({ goals: get().goals.filter((g) => g.id !== id) })
+  },
+
+  async saveProject(project) {
+    await repository.projects.put(project)
+    const rest = get().projects.filter((p) => p.id !== project.id)
+    set({ projects: [...rest, project] })
+  },
+
+  async removeProject(id) {
+    await repository.projects.delete(id)
+    set({ projects: get().projects.filter((p) => p.id !== id) })
   },
 }))
