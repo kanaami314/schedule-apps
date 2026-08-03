@@ -6,6 +6,7 @@
 
 import { useEffect, useState } from 'react'
 import type {
+  DeadlineStrictness,
   FixedEvent,
   FlexibleTask,
   Priority,
@@ -99,6 +100,9 @@ function FixedEventForm({ editing, onDone }: EditFormProps) {
   const [travelMin, setTravelMin] = useState(0)
   const [prepMin, setPrepMin] = useState(0)
   const [bufferMin, setBufferMin] = useState(0)
+  const [place, setPlace] = useState('')
+  const [onlineInfo, setOnlineInfo] = useState('')
+  const [notes, setNotes] = useState('')
 
   // 編集対象が変わったらフォームへ読み込む。
   useEffect(() => {
@@ -115,6 +119,9 @@ function FixedEventForm({ editing, onDone }: EditFormProps) {
     setTravelMin(target.travelTime?.duration ?? 0)
     setPrepMin(target.prepTime?.duration ?? 0)
     setBufferMin(target.bufferTime?.duration ?? 0)
+    setPlace(target.place ?? '')
+    setOnlineInfo(target.onlineInfo ?? '')
+    setNotes(target.notes ?? '')
   }, [target])
 
   const needsWeekdays = repeatKind === 'weekly' || repeatKind === 'biweekly'
@@ -138,6 +145,9 @@ function FixedEventForm({ editing, onDone }: EditFormProps) {
     setTravelMin(0)
     setPrepMin(0)
     setBufferMin(0)
+    setPlace('')
+    setOnlineInfo('')
+    setNotes('')
   }
 
   function toggleWeekday(day: Weekday) {
@@ -180,6 +190,9 @@ function FixedEventForm({ editing, onDone }: EditFormProps) {
       travelTime: travelMin > 0 ? { duration: travelMin } : undefined,
       prepTime: prepMin > 0 ? { duration: prepMin } : undefined,
       bufferTime: bufferMin > 0 ? { duration: bufferMin } : undefined,
+      place: place.trim() || undefined,
+      onlineInfo: onlineInfo.trim() || undefined,
+      notes: notes.trim() || undefined,
     }
     await saveDefinition(event)
     reset()
@@ -285,6 +298,31 @@ function FixedEventForm({ editing, onDone }: EditFormProps) {
           </div>
         )}
         <CategorySelect value={categoryId} onChange={setCategoryId} />
+        {!minimalMode && (
+          <>
+            <div>
+              <label className={labelClass}>場所（任意）</label>
+              <input className={inputClass} value={place} onChange={(e) => setPlace(e.target.value)} />
+            </div>
+            <div>
+              <label className={labelClass}>オンライン情報（任意）</label>
+              <input
+                className={inputClass}
+                placeholder="会議URLなど"
+                value={onlineInfo}
+                onChange={(e) => setOnlineInfo(e.target.value)}
+              />
+            </div>
+          </>
+        )}
+        <div>
+          <label className={labelClass}>メモ（任意）</label>
+          <textarea
+            className={`${inputClass} min-h-14`}
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+          />
+        </div>
         {!minimalMode && <LoadFields value={load} onChange={setLoad} />}
         <div className="flex gap-2">
           <button className={buttonClass} disabled={!canSubmit} onClick={submit}>
@@ -313,6 +351,11 @@ function FlexibleTaskForm({ editing, onDone }: EditFormProps) {
   const [categoryId, setCategoryId] = useState('')
   const [projectId, setProjectId] = useState('')
   const [load, setLoad] = useState<LoadValue>(DEFAULT_LOAD)
+  const [splittable, setSplittable] = useState(false)
+  const [minChunk, setMinChunk] = useState(30)
+  const [startableFrom, setStartableFrom] = useState('')
+  const [strictness, setStrictness] = useState<DeadlineStrictness>('preferred')
+  const [notes, setNotes] = useState('')
 
   useEffect(() => {
     if (!target) return
@@ -323,9 +366,16 @@ function FlexibleTaskForm({ editing, onDone }: EditFormProps) {
     setCategoryId(target.categoryId ?? '')
     setProjectId(target.projectId ?? '')
     setLoad(fromLoadProfile(target.load))
+    setSplittable(target.splittable ?? false)
+    setMinChunk(target.minChunk ?? 30)
+    setStartableFrom(target.startableFrom ?? '')
+    setStrictness(target.deadlineStrictness ?? 'preferred')
+    setNotes(target.notes ?? '')
   }, [target])
 
-  const canSubmit = name.trim() !== '' && deadline !== '' && duration > 0
+  // 分割可能なら最短作業時間が条件付き必須（§5.1）。
+  const canSubmit =
+    name.trim() !== '' && deadline !== '' && duration > 0 && (!splittable || minChunk > 0)
 
   function reset() {
     setName('')
@@ -335,6 +385,11 @@ function FlexibleTaskForm({ editing, onDone }: EditFormProps) {
     setCategoryId('')
     setProjectId('')
     setLoad(DEFAULT_LOAD)
+    setSplittable(false)
+    setMinChunk(30)
+    setStartableFrom('')
+    setStrictness('preferred')
+    setNotes('')
   }
 
   async function submit() {
@@ -352,6 +407,11 @@ function FlexibleTaskForm({ editing, onDone }: EditFormProps) {
       categoryId: categoryId || undefined,
       projectId: projectId || undefined,
       load: toLoadProfile(load),
+      splittable,
+      minChunk: splittable ? minChunk : undefined,
+      startableFrom: startableFrom || undefined,
+      deadlineStrictness: strictness,
+      notes: notes.trim() || undefined,
     }
     await saveDefinition(task)
     reset()
@@ -422,6 +482,62 @@ function FlexibleTaskForm({ editing, onDone }: EditFormProps) {
             </select>
           </div>
         )}
+        {/* 分割可能か＋最短作業時間（§5.1）。最低限モードでも対象。 */}
+        <div className="flex items-end gap-2">
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={splittable}
+              onChange={(e) => setSplittable(e.target.checked)}
+            />
+            分割可能
+          </label>
+          {splittable && (
+            <div className="flex-1">
+              <label className={labelClass}>最短作業時間（分）</label>
+              <input
+                type="number"
+                min={1}
+                className={inputClass}
+                value={minChunk}
+                onChange={(e) => setMinChunk(Number(e.target.value))}
+              />
+            </div>
+          )}
+        </div>
+        {!minimalMode && (
+          <div className="flex gap-2">
+            <div className="flex-1">
+              <label className={labelClass}>開始可能日（任意）</label>
+              <input
+                type="date"
+                className={inputClass}
+                value={startableFrom}
+                onChange={(e) => setStartableFrom(e.target.value)}
+              />
+            </div>
+            <div className="flex-1">
+              <label className={labelClass}>期限の厳しさ</label>
+              <select
+                className={inputClass}
+                value={strictness}
+                onChange={(e) => setStrictness(e.target.value as DeadlineStrictness)}
+              >
+                <option value="strict">厳守</option>
+                <option value="preferred">できれば守る</option>
+                <option value="loose">目安</option>
+              </select>
+            </div>
+          </div>
+        )}
+        <div>
+          <label className={labelClass}>メモ（任意）</label>
+          <textarea
+            className={`${inputClass} min-h-14`}
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+          />
+        </div>
         {!minimalMode && <LoadFields value={load} onChange={setLoad} />}
         <div className="flex gap-2">
           <button className={buttonClass} disabled={!canSubmit} onClick={submit}>
