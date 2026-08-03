@@ -8,6 +8,7 @@ import { useEffect, useState } from 'react'
 import type {
   DeadlineStrictness,
   FixedEvent,
+  Fixity,
   FlexibleTask,
   Id,
   Priority,
@@ -106,6 +107,8 @@ function FixedEventForm({ editing, onDone }: EditFormProps) {
   const [onlineInfo, setOnlineInfo] = useState('')
   const [notes, setNotes] = useState('')
   const [tagIds, setTagIds] = useState<Id[]>([])
+  const [fixity, setFixity] = useState<Fixity>('strict')
+  const [attendanceRequired, setAttendanceRequired] = useState(false)
 
   // 編集対象が変わったらフォームへ読み込む。
   useEffect(() => {
@@ -126,6 +129,8 @@ function FixedEventForm({ editing, onDone }: EditFormProps) {
     setOnlineInfo(target.onlineInfo ?? '')
     setNotes(target.notes ?? '')
     setTagIds(target.tagIds ?? [])
+    setFixity(target.fixity ?? 'strict')
+    setAttendanceRequired(target.attendanceRequired ?? false)
   }, [target])
 
   const needsWeekdays = repeatKind === 'weekly' || repeatKind === 'biweekly'
@@ -153,6 +158,8 @@ function FixedEventForm({ editing, onDone }: EditFormProps) {
     setOnlineInfo('')
     setNotes('')
     setTagIds([])
+    setFixity('strict')
+    setAttendanceRequired(false)
   }
 
   function toggleWeekday(day: Weekday) {
@@ -199,6 +206,8 @@ function FixedEventForm({ editing, onDone }: EditFormProps) {
       onlineInfo: onlineInfo.trim() || undefined,
       notes: notes.trim() || undefined,
       tagIds: tagIds.length > 0 ? tagIds : undefined,
+      fixity,
+      attendanceRequired,
     }
     await saveDefinition(event)
     reset()
@@ -318,6 +327,28 @@ function FixedEventForm({ editing, onDone }: EditFormProps) {
                 value={onlineInfo}
                 onChange={(e) => setOnlineInfo(e.target.value)}
               />
+            </div>
+            <div className="flex items-end gap-2">
+              <div className="flex-1">
+                <label className={labelClass}>固定度</label>
+                <select
+                  className={inputClass}
+                  value={fixity}
+                  onChange={(e) => setFixity(e.target.value as Fixity)}
+                >
+                  <option value="strict">動かさない</option>
+                  <option value="normal">なるべく動かさない</option>
+                  <option value="flexible">調整可</option>
+                </select>
+              </div>
+              <label className="flex flex-1 items-center gap-2 pb-1 text-sm">
+                <input
+                  type="checkbox"
+                  checked={attendanceRequired}
+                  onChange={(e) => setAttendanceRequired(e.target.checked)}
+                />
+                参加が必要
+              </label>
             </div>
           </>
         )}
