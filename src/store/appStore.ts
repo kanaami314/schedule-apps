@@ -14,6 +14,7 @@ import type {
   LongTermGoal,
   Project,
   ScheduleDefinition,
+  Tag,
   WishlistItem,
 } from '../domain/types'
 import { createDexieRepository, type AppRepository } from '../data'
@@ -103,6 +104,8 @@ interface AppState {
   goals: LongTermGoal[]
   /** プロジェクト（§9）。 */
   projects: Project[]
+  /** タグ（§8.2）。 */
+  tags: Tag[]
   /** 最低限モード（§23）。表示・入力を簡略化する（内部データ・計算は共通）。 */
   minimalMode: boolean
   /** 起動中の通知（§16）を有効にするか。既定 false（ユーザーの明示的な許可が必要）。 */
@@ -146,6 +149,10 @@ interface AppState {
   saveProject(project: Project): Promise<void>
   /** プロジェクトを削除する。 */
   removeProject(id: Id): Promise<void>
+  /** タグを追加または更新する（§8.2）。 */
+  saveTag(tag: Tag): Promise<void>
+  /** タグを削除する。 */
+  removeTag(id: Id): Promise<void>
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -157,6 +164,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   wishlist: [],
   goals: [],
   projects: [],
+  tags: [],
   minimalMode: loadMinimalMode(),
   notifyEnabled: loadNotifyEnabled(),
   notifyBeforeMinutes: loadNotifyBefore(),
@@ -204,7 +212,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     // 重複呼び出しは同じ Promise を返し、二重投入を防ぐ。
     if (initPromise) return initPromise
     initPromise = (async () => {
-      const [loadedCategories, definitions, records, reflections, wishlist, goals, projects] =
+      const [loadedCategories, definitions, records, reflections, wishlist, goals, projects, tags] =
         await Promise.all([
           repository.categories.all(),
           repository.definitions.all(),
@@ -213,6 +221,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           repository.wishlist.all(),
           repository.goals.all(),
           repository.projects.all(),
+          repository.tags.all(),
         ])
       // 初回のみ初期カテゴリを投入する（§8.1）。ID固定なので冪等。
       let categories = loadedCategories
@@ -220,7 +229,17 @@ export const useAppStore = create<AppState>((set, get) => ({
         categories = buildDefaultCategories()
         await repository.categories.bulkPut(categories)
       }
-      set({ categories, definitions, records, reflections, wishlist, goals, projects, loaded: true })
+      set({
+        categories,
+        definitions,
+        records,
+        reflections,
+        wishlist,
+        goals,
+        projects,
+        tags,
+        loaded: true,
+      })
     })()
     return initPromise
   },
@@ -290,5 +309,16 @@ export const useAppStore = create<AppState>((set, get) => ({
   async removeProject(id) {
     await repository.projects.delete(id)
     set({ projects: get().projects.filter((p) => p.id !== id) })
+  },
+
+  async saveTag(tag) {
+    await repository.tags.put(tag)
+    const rest = get().tags.filter((t) => t.id !== tag.id)
+    set({ tags: [...rest, tag] })
+  },
+
+  async removeTag(id) {
+    await repository.tags.delete(id)
+    set({ tags: get().tags.filter((t) => t.id !== id) })
   },
 }))

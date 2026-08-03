@@ -9,6 +9,7 @@ import type {
   DeadlineStrictness,
   FixedEvent,
   FlexibleTask,
+  Id,
   Priority,
   RepeatRule,
   ScheduleDefinition,
@@ -21,6 +22,7 @@ import { DEFAULT_LOAD, fromLoadProfile, toLoadProfile, type LoadValue } from './
 import { CategorySelect } from './CategorySelect'
 import { RoutineForm } from './RoutineForm'
 import { FreeActivityForm } from './FreeActivityForm'
+import { TagSelect } from './TagManager'
 
 const cancelButtonClass =
   'rounded border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800'
@@ -103,6 +105,7 @@ function FixedEventForm({ editing, onDone }: EditFormProps) {
   const [place, setPlace] = useState('')
   const [onlineInfo, setOnlineInfo] = useState('')
   const [notes, setNotes] = useState('')
+  const [tagIds, setTagIds] = useState<Id[]>([])
 
   // 編集対象が変わったらフォームへ読み込む。
   useEffect(() => {
@@ -122,6 +125,7 @@ function FixedEventForm({ editing, onDone }: EditFormProps) {
     setPlace(target.place ?? '')
     setOnlineInfo(target.onlineInfo ?? '')
     setNotes(target.notes ?? '')
+    setTagIds(target.tagIds ?? [])
   }, [target])
 
   const needsWeekdays = repeatKind === 'weekly' || repeatKind === 'biweekly'
@@ -148,6 +152,7 @@ function FixedEventForm({ editing, onDone }: EditFormProps) {
     setPlace('')
     setOnlineInfo('')
     setNotes('')
+    setTagIds([])
   }
 
   function toggleWeekday(day: Weekday) {
@@ -193,6 +198,7 @@ function FixedEventForm({ editing, onDone }: EditFormProps) {
       place: place.trim() || undefined,
       onlineInfo: onlineInfo.trim() || undefined,
       notes: notes.trim() || undefined,
+      tagIds: tagIds.length > 0 ? tagIds : undefined,
     }
     await saveDefinition(event)
     reset()
@@ -323,6 +329,7 @@ function FixedEventForm({ editing, onDone }: EditFormProps) {
             onChange={(e) => setNotes(e.target.value)}
           />
         </div>
+        {!minimalMode && <TagSelect value={tagIds} onChange={setTagIds} />}
         {!minimalMode && <LoadFields value={load} onChange={setLoad} />}
         <div className="flex gap-2">
           <button className={buttonClass} disabled={!canSubmit} onClick={submit}>
@@ -356,6 +363,7 @@ function FlexibleTaskForm({ editing, onDone }: EditFormProps) {
   const [startableFrom, setStartableFrom] = useState('')
   const [strictness, setStrictness] = useState<DeadlineStrictness>('preferred')
   const [notes, setNotes] = useState('')
+  const [tagIds, setTagIds] = useState<Id[]>([])
 
   useEffect(() => {
     if (!target) return
@@ -371,6 +379,7 @@ function FlexibleTaskForm({ editing, onDone }: EditFormProps) {
     setStartableFrom(target.startableFrom ?? '')
     setStrictness(target.deadlineStrictness ?? 'preferred')
     setNotes(target.notes ?? '')
+    setTagIds(target.tagIds ?? [])
   }, [target])
 
   // 分割可能なら最短作業時間が条件付き必須（§5.1）。
@@ -390,6 +399,7 @@ function FlexibleTaskForm({ editing, onDone }: EditFormProps) {
     setStartableFrom('')
     setStrictness('preferred')
     setNotes('')
+    setTagIds([])
   }
 
   async function submit() {
@@ -412,6 +422,7 @@ function FlexibleTaskForm({ editing, onDone }: EditFormProps) {
       startableFrom: startableFrom || undefined,
       deadlineStrictness: strictness,
       notes: notes.trim() || undefined,
+      tagIds: tagIds.length > 0 ? tagIds : undefined,
     }
     await saveDefinition(task)
     reset()
@@ -538,6 +549,7 @@ function FlexibleTaskForm({ editing, onDone }: EditFormProps) {
             onChange={(e) => setNotes(e.target.value)}
           />
         </div>
+        {!minimalMode && <TagSelect value={tagIds} onChange={setTagIds} />}
         {!minimalMode && <LoadFields value={load} onChange={setLoad} />}
         <div className="flex gap-2">
           <button className={buttonClass} disabled={!canSubmit} onClick={submit}>

@@ -10,6 +10,7 @@ import { BalanceAnalysis } from './features/schedule/BalanceAnalysis'
 import { CalendarView } from './features/schedule/CalendarView'
 import { GoalProjectManager } from './features/schedule/GoalProjectManager'
 import { NotificationCenter } from './features/schedule/NotificationCenter'
+import { TagManager } from './features/schedule/TagManager'
 
 function App() {
   const init = useAppStore((s) => s.init)
@@ -56,6 +57,12 @@ function App() {
             <section>
               <h2 className="mb-3 text-lg font-semibold">長期目標・プロジェクト</h2>
               <GoalProjectManager />
+            </section>
+          )}
+          {!minimalMode && (
+            <section>
+              <h2 className="mb-3 text-lg font-semibold">タグ</h2>
+              <TagManager />
             </section>
           )}
           <section>
