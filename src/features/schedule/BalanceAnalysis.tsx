@@ -69,6 +69,14 @@ export function BalanceAnalysis() {
     [period, definitions, categoryMeta, records],
   )
 
+  // §20.6: 今週・先週は週間目標、今月は月間目標。今日は目標を使わない。
+  const targetField =
+    period === 'thisMonth'
+      ? 'monthlyTargetMinutes'
+      : period === 'today'
+        ? null
+        : 'weeklyTargetMinutes'
+
   const total = mode === 'actual' ? result.totalActual : result.totalPlanned
   const value = (c: { plannedMinutes: number; actualMinutes: number }) =>
     mode === 'actual' ? c.actualMinutes : c.plannedMinutes
@@ -132,12 +140,20 @@ export function BalanceAnalysis() {
             const meta = categoryMeta.get(c.categoryId)
             const v = value(c)
             const pct = total > 0 ? (v / total) * 100 : 0
+            const target = targetField ? meta?.[targetField] : undefined
+            const achievement = target && target > 0 ? Math.round((v / target) * 100) : null
             return (
               <div key={c.categoryId || 'none'}>
                 <div className="mb-0.5 flex justify-between text-sm">
                   <span>{meta?.name ?? '未分類'}</span>
                   <span className="text-gray-500">
                     {fmtMinutes(v)}・{Math.round(pct)}%
+                    {target != null && (
+                      <span className="ml-2 text-xs text-blue-500">
+                        目標 {fmtMinutes(target)}
+                        {achievement != null && `・達成 ${achievement}%`}
+                      </span>
+                    )}
                   </span>
                 </div>
                 <div className="h-3 overflow-hidden rounded bg-gray-100 dark:bg-gray-800">

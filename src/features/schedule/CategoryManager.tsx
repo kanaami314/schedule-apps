@@ -8,6 +8,7 @@ import { useAppStore } from '../../store/appStore'
 import { newId } from '../../lib/ids'
 import { LoadFields } from './LoadFields'
 import { DEFAULT_LOAD, toLoadProfile, type LoadValue } from './loadValue'
+import { validateTargetChange, type TargetField } from '../../domain/analytics/targets'
 
 const inputClass =
   'w-full rounded border border-gray-300 px-2 py-1 text-sm dark:border-gray-600 dark:bg-gray-800'
@@ -83,6 +84,47 @@ function CreateCategoryForm() {
   )
 }
 
+/** 分 → 時間（表示用）。未設定は空文字。 */
+const minutesToHours = (m: number | undefined): string => (m == null ? '' : String(m / 60))
+
+/** カテゴリ1件の目標時間入力（§20.6）。週・月の目標を時間で編集する。 */
+function TargetInput({ category, field, label }: { category: Category; field: TargetField; label: string }) {
+  const categories = useAppStore((s) => s.categories)
+  const saveCategory = useAppStore((s) => s.saveCategory)
+  const [error, setError] = useState<string | null>(null)
+
+  function change(value: string) {
+    const hours = Number(value)
+    const minutes =
+      value === '' || !Number.isFinite(hours) || hours <= 0 ? undefined : Math.round(hours * 60)
+    const result = validateTargetChange(categories, category.id, field, minutes)
+    if (!result.ok) {
+      setError(result.reason ?? '設定できません')
+      return
+    }
+    setError(null)
+    void saveCategory({ ...category, [field]: minutes })
+  }
+
+  return (
+    <label className="flex items-center gap-1 text-[11px] text-gray-500">
+      {label}
+      <input
+        type="number"
+        min={0}
+        step={0.5}
+        className={`w-14 rounded border px-1 py-0.5 text-xs dark:bg-gray-800 ${
+          error ? 'border-red-400' : 'border-gray-300 dark:border-gray-600'
+        }`}
+        defaultValue={minutesToHours(category[field])}
+        title={error ?? '時間単位（h）'}
+        onBlur={(e) => change(e.target.value)}
+      />
+      h
+    </label>
+  )
+}
+
 function CategoryList() {
   const categories = useAppStore((s) => s.categories)
   const removeCategory = useAppStore((s) => s.removeCategory)
@@ -95,23 +137,28 @@ function CategoryList() {
   if (sorted.length === 0) return <p className="text-sm text-gray-500">カテゴリがありません。</p>
 
   return (
-    <ul className="flex flex-wrap gap-2">
+    <ul className="space-y-1">
       {sorted.map((c) => (
         <li
           key={c.id}
-          className="flex items-center gap-1.5 rounded border border-gray-200 px-2 py-1 text-sm dark:border-gray-700"
+          className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded border border-gray-200 px-2 py-1 text-sm dark:border-gray-700"
         >
           <span
             className="inline-block h-3 w-3 rounded-full"
             style={{ backgroundColor: c.color ?? '#9ca3af' }}
           />
-          <span>{c.name}</span>
+          <span className="font-medium">{c.name}</span>
           {c.parentId && (
             <span className="text-xs text-gray-400">/ {nameById.get(c.parentId) ?? '?'}</span>
           )}
-          <button className="ml-1 text-xs text-red-600 hover:underline" onClick={() => removeCategory(c.id)}>
-            ×
-          </button>
+          <span className="ml-auto flex items-center gap-2">
+            {/* 目標時間（§20.6）。週・月を時間で設定。 */}
+            <TargetInput category={c} field="weeklyTargetMinutes" label="週" />
+            <TargetInput category={c} field="monthlyTargetMinutes" label="月" />
+            <button className="text-xs text-red-600 hover:underline" onClick={() => removeCategory(c.id)}>
+              ×
+            </button>
+          </span>
         </li>
       ))}
     </ul>
