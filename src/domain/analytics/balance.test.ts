@@ -60,6 +60,21 @@ describe('computeBalance', () => {
     expect(result.categories).toEqual([{ categoryId: 'top', plannedMinutes: 150, actualMinutes: 0 }])
   })
 
+  it('負荷分析（§20.7）: 配置予定の時間重み付き平均を区分にする', () => {
+    const categories = new Map<Id, Category>([['top', category('top', '研究')]])
+    // 高負荷(3,3,3) の固定予定 → 各軸「高」。
+    const defs: FixedEvent[] = [
+      { ...fixed('a', '2026-08-03', '09:00', '10:00', 'top'), load: { focus: 3, mental: 3, physical: 3 } },
+    ]
+    const result = computeBalance('today', monday, defs, categories, [])
+    expect(result.load).toEqual({ total: 'high', focus: 'high', mental: 'high', physical: 'high' })
+  })
+
+  it('負荷を持つ予定が無ければ負荷分析は null', () => {
+    const result = computeBalance('today', monday, [], new Map(), [])
+    expect(result.load).toEqual({ total: null, focus: null, mental: null, physical: null })
+  })
+
   it('完了記録から実績時間を積み上げる', () => {
     const categories = new Map<Id, Category>([['top', category('top', '研究')]])
     const defs: FixedEvent[] = [fixed('a', '2026-08-03', '09:00', '10:00', 'top')]

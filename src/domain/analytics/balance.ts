@@ -15,6 +15,7 @@
 
 import type { ActivityRecord, Category, Id, ScheduleDefinition } from '../types'
 import { categoryChain } from '../load/inheritance'
+import { classifyLoad, type LoadCategory } from '../load/score'
 import { scheduleDay } from '../scheduler/scheduleDay'
 import type { Interval } from '../scheduler/intervals'
 
@@ -29,10 +30,23 @@ export interface CategoryBalance {
   actualMinutes: number
 }
 
+/**
+ * 負荷分析（§20.7）。期間内に配置された予定の、時間で重み付けした平均負荷レベルを
+ * 軸ごとに区分（低/普通/高）で表す。負荷を持つ予定が無い軸は null。
+ */
+export interface LoadAnalysis {
+  total: LoadCategory | null
+  focus: LoadCategory | null
+  mental: LoadCategory | null
+  physical: LoadCategory | null
+}
+
 export interface BalanceResult {
   categories: CategoryBalance[]
   totalPlanned: number
   totalActual: number
+  /** 負荷分析（§20.7）。 */
+  load: LoadAnalysis
 }
 
 const pad = (n: number) => String(n).padStart(2, '0')
@@ -104,12 +118,23 @@ export function computeBalance(
   const add = (map: Map<Id, number>, key: Id, minutes: number) =>
     map.set(key, (map.get(key) ?? 0) + minutes)
 
+  // 負荷分析（§20.7）用の、時間で重み付けした軸別の負荷レベル合計。
+  const loadSum = { focus: 0, mental: 0, physical: 0 }
+  let loadMinutes = 0
+
   for (const date of dates) {
     const { timeline } = scheduleDay({ date, definitions, categories })
     const itemById = new Map(timeline.map((i) => [i.id, i]))
     for (const item of timeline) {
       if (item.kind === 'break') continue
       add(planned, topLevel(item.categoryId), dur(item.interval))
+      if (item.load) {
+        const minutes = dur(item.interval)
+        loadSum.focus += item.load.focus * minutes
+        loadSum.mental += item.load.mental * minutes
+        loadSum.physical += item.load.physical * minutes
+        loadMinutes += minutes
+      }
     }
     for (const record of recordsByDate.get(date) ?? []) {
       if (record.status !== 'completed') continue
@@ -127,9 +152,20 @@ export function computeBalance(
   }))
   result.sort((a, b) => b.plannedMinutes - a.plannedMinutes)
 
+  // 軸ごとの平均負荷レベルを区分に変換（負荷を持つ予定が無ければ null）。
+  const classifyAxis = (sum: number): LoadCategory | null =>
+    loadMinutes > 0 ? classifyLoad(sum / loadMinutes) : null
+  const load: LoadAnalysis = {
+    focus: classifyAxis(loadSum.focus),
+    mental: classifyAxis(loadSum.mental),
+    physical: classifyAxis(loadSum.physical),
+    total: classifyAxis((loadSum.focus + loadSum.mental + loadSum.physical) / 3),
+  }
+
   return {
     categories: result,
     totalPlanned: [...planned.values()].reduce((s, n) => s + n, 0),
     totalActual: [...actual.values()].reduce((s, n) => s + n, 0),
+    load,
   }
 }

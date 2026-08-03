@@ -8,7 +8,20 @@
 import { useMemo, useState } from 'react'
 import type { Category, Id } from '../../domain/types'
 import { computeBalance, type BalancePeriod } from '../../domain/analytics/balance'
+import type { LoadCategory } from '../../domain/load/score'
 import { useAppStore } from '../../store/appStore'
+
+const LOAD_LABEL: Record<LoadCategory, { text: string; className: string }> = {
+  low: { text: '低い', className: 'bg-green-200 text-green-800 dark:bg-green-800 dark:text-green-100' },
+  medium: { text: '普通', className: 'bg-yellow-200 text-yellow-800 dark:bg-yellow-800 dark:text-yellow-100' },
+  high: { text: '高い', className: 'bg-red-200 text-red-800 dark:bg-red-800 dark:text-red-100' },
+}
+
+function LoadBadge({ value }: { value: LoadCategory | null }) {
+  if (value === null) return <span className="text-xs text-gray-400">—</span>
+  const b = LOAD_LABEL[value]
+  return <span className={`rounded px-1.5 py-0.5 text-xs font-medium ${b.className}`}>{b.text}</span>
+}
 
 const PERIODS: { value: BalancePeriod; label: string }[] = [
   { value: 'today', label: '今日' },
@@ -139,6 +152,29 @@ export function BalanceAnalysis() {
           <p className="pt-1 text-xs text-gray-400">合計: {fmtMinutes(total)}</p>
         </div>
       )}
+
+      {/* 負荷分析（§20.7）: 期間の配置予定の平均負荷区分 */}
+      <div className="rounded-lg border border-gray-200 p-3 dark:border-gray-700">
+        <h4 className="mb-2 text-sm font-semibold">負荷分析（§20.7）</h4>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="flex items-center justify-between rounded border border-gray-100 px-2 py-1 dark:border-gray-800">
+            <span className="text-xs text-gray-500">総合</span>
+            <LoadBadge value={result.load.total} />
+          </div>
+          <div className="flex items-center justify-between rounded border border-gray-100 px-2 py-1 dark:border-gray-800">
+            <span className="text-xs text-gray-500">集中</span>
+            <LoadBadge value={result.load.focus} />
+          </div>
+          <div className="flex items-center justify-between rounded border border-gray-100 px-2 py-1 dark:border-gray-800">
+            <span className="text-xs text-gray-500">精神</span>
+            <LoadBadge value={result.load.mental} />
+          </div>
+          <div className="flex items-center justify-between rounded border border-gray-100 px-2 py-1 dark:border-gray-800">
+            <span className="text-xs text-gray-500">身体</span>
+            <LoadBadge value={result.load.physical} />
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
