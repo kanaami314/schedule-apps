@@ -18,3 +18,12 @@ export const DEFAULT_LOAD: LoadValue = { focus: 2, mental: 2, physical: 2 }
 export function toLoadProfile(value: LoadValue): LoadProfile {
   return { focus: value.focus, mental: value.mental, physical: value.physical }
 }
+
+/** LoadProfile をフォーム値へ変換する（編集時の初期値）。未設定項目は既定（普通）。 */
+export function fromLoadProfile(profile?: LoadProfile): LoadValue {
+  return {
+    focus: profile?.focus ?? DEFAULT_LOAD.focus,
+    mental: profile?.mental ?? DEFAULT_LOAD.mental,
+    physical: profile?.physical ?? DEFAULT_LOAD.physical,
+  }
+}

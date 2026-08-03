@@ -1,17 +1,20 @@
 /**
- * 最小の予定管理UI（作成フォーム＋一覧）。
- * 固定予定・柔軟なタスクの作成と削除ができ、Dexie に永続化される。
- * 自動スケジューリング表示は今後追加する。
+ * 最小の予定管理UI（作成・編集フォーム＋一覧）。
+ * 固定予定・柔軟なタスクの作成・編集・削除ができ、Dexie に永続化される。
+ * 一覧の「編集」で対象を選ぶと該当フォームに読み込まれ、更新できる。
  */
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { FixedEvent, FlexibleTask, Priority, ScheduleDefinition } from '../../domain/types'
 import { useAppStore } from '../../store/appStore'
 import { newId, nowLocalIso } from '../../lib/ids'
 import { LoadFields } from './LoadFields'
-import { DEFAULT_LOAD, toLoadProfile, type LoadValue } from './loadValue'
+import { DEFAULT_LOAD, fromLoadProfile, toLoadProfile, type LoadValue } from './loadValue'
 import { CategorySelect } from './CategorySelect'
 import { RoutineForm } from './RoutineForm'
+
+const cancelButtonClass =
+  'rounded border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800'
 
 const inputClass =
   'w-full rounded border border-gray-300 px-2 py-1 text-sm dark:border-gray-600 dark:bg-gray-800'
@@ -20,8 +23,16 @@ const cardClass = 'rounded-lg border border-gray-200 p-4 dark:border-gray-700'
 const buttonClass =
   'rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-40'
 
-function FixedEventForm() {
+interface EditFormProps {
+  /** 編集対象。この種別に一致するときだけフォームに読み込む。 */
+  editing: ScheduleDefinition | null
+  /** 送信・キャンセルで編集を終える。 */
+  onDone: () => void
+}
+
+function FixedEventForm({ editing, onDone }: EditFormProps) {
   const saveDefinition = useAppStore((s) => s.saveDefinition)
+  const target = editing?.kind === 'fixed' ? editing : null
   const [name, setName] = useState('')
   const [date, setDate] = useState('')
   const [start, setStart] = useState('09:00')
@@ -29,14 +40,35 @@ function FixedEventForm() {
   const [categoryId, setCategoryId] = useState('')
   const [load, setLoad] = useState<LoadValue>(DEFAULT_LOAD)
 
+  // 編集対象が変わったらフォームへ読み込む。
+  useEffect(() => {
+    if (!target) return
+    setName(target.name)
+    setDate(target.date)
+    setStart(target.time.start)
+    setEnd(target.time.end)
+    setCategoryId(target.categoryId ?? '')
+    setLoad(fromLoadProfile(target.load))
+  }, [target])
+
   const canSubmit = name.trim() !== '' && date !== '' && start !== '' && end !== '' && start < end
+
+  function reset() {
+    setName('')
+    setDate('')
+    setStart('09:00')
+    setEnd('10:00')
+    setCategoryId('')
+    setLoad(DEFAULT_LOAD)
+  }
 
   async function submit() {
     const now = nowLocalIso()
     const event: FixedEvent = {
-      id: newId(),
+      ...(target ?? {}),
+      id: target?.id ?? newId(),
       kind: 'fixed',
-      createdAt: now,
+      createdAt: target?.createdAt ?? now,
       updatedAt: now,
       name: name.trim(),
       date,
@@ -45,13 +77,18 @@ function FixedEventForm() {
       load: toLoadProfile(load),
     }
     await saveDefinition(event)
-    setName('')
-    setLoad(DEFAULT_LOAD)
+    reset()
+    onDone()
+  }
+
+  function cancel() {
+    reset()
+    onDone()
   }
 
   return (
     <div className={cardClass}>
-      <h3 className="mb-3 font-semibold">固定予定を追加</h3>
+      <h3 className="mb-3 font-semibold">{target ? '固定予定を編集' : '固定予定を追加'}</h3>
       <div className="space-y-2">
         <div>
           <label className={labelClass}>予定名</label>
@@ -88,16 +125,24 @@ function FixedEventForm() {
         </div>
         <CategorySelect value={categoryId} onChange={setCategoryId} />
         <LoadFields value={load} onChange={setLoad} />
-        <button className={buttonClass} disabled={!canSubmit} onClick={submit}>
-          追加
-        </button>
+        <div className="flex gap-2">
+          <button className={buttonClass} disabled={!canSubmit} onClick={submit}>
+            {target ? '更新' : '追加'}
+          </button>
+          {target && (
+            <button className={cancelButtonClass} onClick={cancel}>
+              キャンセル
+            </button>
+          )}
+        </div>
       </div>
     </div>
   )
 }
 
-function FlexibleTaskForm() {
+function FlexibleTaskForm({ editing, onDone }: EditFormProps) {
   const saveDefinition = useAppStore((s) => s.saveDefinition)
+  const target = editing?.kind === 'flexible' ? editing : null
   const [name, setName] = useState('')
   const [deadline, setDeadline] = useState('')
   const [duration, setDuration] = useState(60)
@@ -105,14 +150,34 @@ function FlexibleTaskForm() {
   const [categoryId, setCategoryId] = useState('')
   const [load, setLoad] = useState<LoadValue>(DEFAULT_LOAD)
 
+  useEffect(() => {
+    if (!target) return
+    setName(target.name)
+    setDeadline(target.deadline)
+    setDuration(target.estimatedDuration)
+    setPriority(target.priority ?? 'medium')
+    setCategoryId(target.categoryId ?? '')
+    setLoad(fromLoadProfile(target.load))
+  }, [target])
+
   const canSubmit = name.trim() !== '' && deadline !== '' && duration > 0
+
+  function reset() {
+    setName('')
+    setDeadline('')
+    setDuration(60)
+    setPriority('medium')
+    setCategoryId('')
+    setLoad(DEFAULT_LOAD)
+  }
 
   async function submit() {
     const now = nowLocalIso()
     const task: FlexibleTask = {
-      id: newId(),
+      ...(target ?? {}),
+      id: target?.id ?? newId(),
       kind: 'flexible',
-      createdAt: now,
+      createdAt: target?.createdAt ?? now,
       updatedAt: now,
       name: name.trim(),
       deadline,
@@ -122,13 +187,18 @@ function FlexibleTaskForm() {
       load: toLoadProfile(load),
     }
     await saveDefinition(task)
-    setName('')
-    setLoad(DEFAULT_LOAD)
+    reset()
+    onDone()
+  }
+
+  function cancel() {
+    reset()
+    onDone()
   }
 
   return (
     <div className={cardClass}>
-      <h3 className="mb-3 font-semibold">柔軟なタスクを追加</h3>
+      <h3 className="mb-3 font-semibold">{target ? '柔軟なタスクを編集' : '柔軟なタスクを追加'}</h3>
       <div className="space-y-2">
         <div>
           <label className={labelClass}>タスク名</label>
@@ -169,9 +239,16 @@ function FlexibleTaskForm() {
         </div>
         <CategorySelect value={categoryId} onChange={setCategoryId} />
         <LoadFields value={load} onChange={setLoad} />
-        <button className={buttonClass} disabled={!canSubmit} onClick={submit}>
-          追加
-        </button>
+        <div className="flex gap-2">
+          <button className={buttonClass} disabled={!canSubmit} onClick={submit}>
+            {target ? '更新' : '追加'}
+          </button>
+          {target && (
+            <button className={cancelButtonClass} onClick={cancel}>
+              キャンセル
+            </button>
+          )}
+        </div>
       </div>
     </div>
   )
@@ -197,7 +274,16 @@ const KIND_LABEL: Record<ScheduleDefinition['kind'], string> = {
   routine: '生活ルーチン',
 }
 
-function DefinitionList() {
+/** 一覧から編集できる種別（インラインフォームがあるもの）。 */
+const EDITABLE_KINDS: ReadonlySet<ScheduleDefinition['kind']> = new Set(['fixed', 'flexible'])
+
+function DefinitionList({
+  editingId,
+  onEdit,
+}: {
+  editingId: string | null
+  onEdit: (def: ScheduleDefinition) => void
+}) {
   const definitions = useAppStore((s) => s.definitions)
   const removeDefinition = useAppStore((s) => s.removeDefinition)
 
@@ -212,7 +298,11 @@ function DefinitionList() {
       {sorted.map((def) => (
         <li
           key={def.id}
-          className="flex items-center justify-between rounded border border-gray-200 px-3 py-2 text-sm dark:border-gray-700"
+          className={`flex items-center justify-between rounded border px-3 py-2 text-sm dark:border-gray-700 ${
+            def.id === editingId
+              ? 'border-blue-400 bg-blue-50 dark:bg-blue-950/40'
+              : 'border-gray-200'
+          }`}
         >
           <div>
             <span className="mr-2 rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-600 dark:bg-gray-700 dark:text-gray-300">
@@ -221,12 +311,19 @@ function DefinitionList() {
             <span className="font-medium">{def.name ?? '(無名)'}</span>
             <span className="ml-2 text-gray-500">{describe(def)}</span>
           </div>
-          <button
-            className="text-xs text-red-600 hover:underline"
-            onClick={() => removeDefinition(def.id)}
-          >
-            削除
-          </button>
+          <div className="flex shrink-0 gap-3">
+            {EDITABLE_KINDS.has(def.kind) && (
+              <button className="text-xs text-blue-600 hover:underline" onClick={() => onEdit(def)}>
+                編集
+              </button>
+            )}
+            <button
+              className="text-xs text-red-600 hover:underline"
+              onClick={() => removeDefinition(def.id)}
+            >
+              削除
+            </button>
+          </div>
         </li>
       ))}
     </ul>
@@ -234,16 +331,18 @@ function DefinitionList() {
 }
 
 export function ScheduleManager() {
+  const [editing, setEditing] = useState<ScheduleDefinition | null>(null)
+
   return (
     <div className="grid gap-6 md:grid-cols-2">
       <div className="space-y-4">
-        <FixedEventForm />
-        <FlexibleTaskForm />
+        <FixedEventForm editing={editing} onDone={() => setEditing(null)} />
+        <FlexibleTaskForm editing={editing} onDone={() => setEditing(null)} />
         <RoutineForm />
       </div>
       <div>
         <h3 className="mb-3 font-semibold">登録済みの予定</h3>
-        <DefinitionList />
+        <DefinitionList editingId={editing?.id ?? null} onEdit={setEditing} />
       </div>
     </div>
   )
