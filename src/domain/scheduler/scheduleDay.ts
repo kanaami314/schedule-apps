@@ -139,8 +139,10 @@ export function scheduleDay(options: ScheduleDayOptions): ScheduleDayResult {
   const routinePlacements = placeRoutines(routines, window, weekday, busy)
 
   // 3. 柔軟なタスクを整列して残りの空きへ貪欲配置。
+  //    開始可能日(§5.2)が対象日より後のタスクはこの日には配置しない。
   const flexibleTasks = options.definitions.filter(
-    (d): d is Extract<ScheduleDefinition, { kind: 'flexible' }> => d.kind === 'flexible',
+    (d): d is Extract<ScheduleDefinition, { kind: 'flexible' }> =>
+      d.kind === 'flexible' && (!d.startableFrom || d.startableFrom <= options.date),
   )
   const ordered = orderFlexibleTasks(flexibleTasks, {
     referenceTime,

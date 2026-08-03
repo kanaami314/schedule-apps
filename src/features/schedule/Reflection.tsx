@@ -2,10 +2,18 @@
  * 日次振り返り（§19）。対象日を選び、自動集計(§19.1)と主観評価の入力を行う。
  * 自動集計は当日の自動スケジュール結果と実績記録(§14)から算出する
  * （`domain/analytics/dailySummary.ts`）。主観評価は DailyReflection として永続化する。
+ *
+ * §14.3 未完了申告: その日の予定ごとに 完了/未完了 を後から申告できる（実績 records を更新）。
+ * 未完了の柔軟タスクは「翌日以降へ回す」で開始可能日を翌日に設定し、当日以降の
+ * 自動配置から今日ぶんを外す。「今日の後ろへずらす」「優先度の低い予定と交換」は
+ * 手動配置・交換ロジックが未整備のため今後（[[project-status]]）。
  */
 
 import { useEffect, useMemo, useState } from 'react'
-import type { Category, DailyReflection, Id } from '../../domain/types'
+import type { ActivityRecord, Category, DailyReflection, FlexibleTask, Id } from '../../domain/types'
+import { recordId } from '../../domain/types'
+import type { PlacedItem } from '../../domain/scheduler/placement'
+import { minutesToTime } from '../../domain/scheduler/intervals'
 import { scheduleDay } from '../../domain/scheduler/scheduleDay'
 import { computeDailySummary } from '../../domain/analytics/dailySummary'
 import { nowLocalIso } from '../../lib/ids'
@@ -60,6 +68,8 @@ export function Reflection() {
   const records = useAppStore((s) => s.records)
   const reflections = useAppStore((s) => s.reflections)
   const saveReflection = useAppStore((s) => s.saveReflection)
+  const saveRecord = useAppStore((s) => s.saveRecord)
+  const saveDefinition = useAppStore((s) => s.saveDefinition)
   const minimalMode = useAppStore((s) => s.minimalMode)
 
   // 最低限モードは 集中状態・気分・自由記述 のみ（§23.5）。
@@ -91,12 +101,56 @@ export function Reflection() {
     setSaved(false)
   }, [existing])
 
-  const summary = useMemo(() => {
+  const { summary, plans } = useMemo(() => {
     const categoryMap = new Map<Id, Category>(categories.map((c) => [c.id, c]))
     const { timeline } = scheduleDay({ date, definitions, categories: categoryMap, window: WINDOW })
     const dayRecords = records.filter((r) => r.date === date)
-    return computeDailySummary(timeline, dayRecords)
+    // 休憩を除く「その日の予定」を §14.3 の申告対象にする。
+    const plans = timeline.filter((i) => i.kind !== 'break')
+    return { summary: computeDailySummary(timeline, dayRecords), plans }
   }, [date, definitions, categories, records])
+
+  // 対象日の実績を配置ブロックIDで引く。
+  const recordByItem = useMemo(() => {
+    const map = new Map<string, ActivityRecord>()
+    for (const r of records) if (r.date === date) map.set(r.itemId, r)
+    return map
+  }, [records, date])
+
+  /** その日の予定に完了/未完了を申告する（§14.2/§14.3）。 */
+  function declare(item: PlacedItem, status: 'completed' | 'incomplete') {
+    const now = nowLocalIso()
+    const existingRec = recordByItem.get(item.id)
+    void saveRecord({
+      id: recordId(date, item.id),
+      date,
+      itemId: item.id,
+      sourceId: item.sourceId ?? item.id,
+      status,
+      actualStart: existingRec?.actualStart,
+      // 完了申告で実終了が無ければ予定終了時刻を用いる（§14.2）。
+      actualEnd:
+        status === 'completed'
+          ? (existingRec?.actualEnd ?? `${date}T${minutesToTime(item.interval.end)}`)
+          : existingRec?.actualEnd,
+      createdAt: existingRec?.createdAt ?? now,
+      updatedAt: now,
+    })
+  }
+
+  /** 未完了の柔軟タスクを翌日以降へ回す（開始可能日を翌日に設定, §14.3）。 */
+  function deferToTomorrow(item: PlacedItem) {
+    const def = item.sourceId
+      ? definitions.find((d): d is FlexibleTask => d.id === item.sourceId && d.kind === 'flexible')
+      : undefined
+    if (!def) return
+    const next = new Date(`${date}T00:00`)
+    next.setDate(next.getDate() + 1)
+    const p = (n: number) => String(n).padStart(2, '0')
+    const tomorrow = `${next.getFullYear()}-${p(next.getMonth() + 1)}-${p(next.getDate())}`
+    void saveDefinition({ ...def, startableFrom: tomorrow, updatedAt: nowLocalIso() })
+    declare(item, 'incomplete')
+  }
 
   async function save() {
     const now = nowLocalIso()
@@ -154,6 +208,67 @@ export function Reflection() {
             </ul>
           )}
         </div>
+      </div>
+
+      {/* その日の予定 — 完了/未完了の申告（§14.2/§14.3） */}
+      <div className={cardClass}>
+        <h3 className="mb-3 text-sm font-semibold">その日の予定（完了・未完了の申告）</h3>
+        {plans.length === 0 ? (
+          <p className="text-xs text-gray-400">配置された予定がありません。</p>
+        ) : (
+          <ul className="space-y-1">
+            {plans.map((item) => {
+              const status = recordByItem.get(item.id)?.status
+              const isFlexible = item.kind === 'flexible'
+              return (
+                <li
+                  key={item.id}
+                  className="flex flex-wrap items-center gap-2 rounded border border-gray-200 px-2 py-1 text-sm dark:border-gray-700"
+                >
+                  <span className="font-mono text-[11px] text-gray-500">
+                    {minutesToTime(item.interval.start)}
+                  </span>
+                  <span className="flex-1 truncate font-medium">{item.label ?? item.kind}</span>
+                  {status === 'completed' && (
+                    <span className="rounded bg-emerald-100 px-1.5 text-[10px] text-emerald-700 dark:bg-emerald-900 dark:text-emerald-200">
+                      完了
+                    </span>
+                  )}
+                  {status === 'incomplete' && (
+                    <span className="rounded bg-red-100 px-1.5 text-[10px] text-red-700 dark:bg-red-900 dark:text-red-200">
+                      未完了
+                    </span>
+                  )}
+                  {status !== 'completed' && (
+                    <button
+                      className="text-xs text-emerald-600 hover:underline"
+                      onClick={() => declare(item, 'completed')}
+                    >
+                      完了
+                    </button>
+                  )}
+                  {status !== 'incomplete' && (
+                    <button
+                      className="text-xs text-red-600 hover:underline"
+                      onClick={() => declare(item, 'incomplete')}
+                    >
+                      未完了
+                    </button>
+                  )}
+                  {isFlexible && (
+                    <button
+                      className="text-xs text-blue-600 hover:underline"
+                      onClick={() => deferToTomorrow(item)}
+                      title="開始可能日を翌日にして今日の配置から外す"
+                    >
+                      翌日以降へ
+                    </button>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+        )}
       </div>
 
       {/* 主観評価（§19、任意入力） */}

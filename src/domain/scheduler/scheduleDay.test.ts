@@ -77,6 +77,27 @@ describe('scheduleDay', () => {
     expect(result.unplaced.map((u) => u.task.id)).toContain('task')
   })
 
+  it('開始可能日より前の日には柔軟タスクを配置しない（§5.2）', () => {
+    const base = {
+      date: DATE, // 2026-08-05
+      categories: noCategories,
+      window: { start: 540, end: 720 },
+    }
+    // 開始可能日が翌日 → 対象日(8/5)には配置されない。
+    const later = scheduleDay({
+      ...base,
+      definitions: [flex({ id: 't', estimatedDuration: 60, startableFrom: '2026-08-06' })],
+    })
+    expect(later.timeline.find((i) => i.sourceId === 't')).toBeUndefined()
+
+    // 開始可能日が当日 → 配置される。
+    const today = scheduleDay({
+      ...base,
+      definitions: [flex({ id: 't', estimatedDuration: 60, startableFrom: '2026-08-05' })],
+    })
+    expect(today.timeline.find((i) => i.sourceId === 't')).toBeDefined()
+  })
+
   it('兼用可(shareable)の付随時間は占有に含めない（§4.4）', () => {
     const result = scheduleDay({
       date: DATE,
