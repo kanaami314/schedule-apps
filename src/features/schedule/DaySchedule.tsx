@@ -5,8 +5,8 @@
 
 import { useMemo, useState, type CSSProperties } from 'react'
 import type { Category, Id, ResolvedLoad } from '../../domain/types'
-import { minutesToTime, timeToMinutes, type Interval } from '../../domain/scheduler/intervals'
-import { scheduleDay, type ScheduleDayResult } from '../../domain/scheduler/scheduleDay'
+import { minutesToTime, type Interval } from '../../domain/scheduler/intervals'
+import { scheduleDay, FULL_DAY } from '../../domain/scheduler/scheduleDay'
 import type { PlacedItem, UnplacedReason } from '../../domain/scheduler/placement'
 import { classifyLoad, unitLoad, type LoadCategory } from '../../domain/load/score'
 import { categoryChain } from '../../domain/load/inheritance'
@@ -129,26 +129,24 @@ const timeInputClass =
   'rounded border border-gray-300 px-2 py-1 text-sm dark:border-gray-600 dark:bg-gray-800'
 const fieldLabel = 'block text-xs font-medium text-gray-600 dark:text-gray-300'
 
+/** 表示・配置とも対象日の 24 時間全体を対象にする。 */
+const DAY_WINDOW: Interval = FULL_DAY
+
 export function DaySchedule() {
   const definitions = useAppStore((s) => s.definitions)
   const categories = useAppStore((s) => s.categories)
   const [date, setDate] = useState(todayIso())
-  const [startTime, setStartTime] = useState('07:00')
-  const [endTime, setEndTime] = useState('23:00')
-  const [result, setResult] = useState<ScheduleDayResult | null>(null)
-  const [window, setWindow] = useState<Interval>({ start: 420, end: 1380 })
 
   const categoryMap = useMemo(
     () => new Map<Id, Category>(categories.map((c) => [c.id, c])),
     [categories],
   )
 
-  function run() {
-    const w: Interval = { start: timeToMinutes(startTime), end: timeToMinutes(endTime) }
-    if (w.end <= w.start) return
-    setWindow(w)
-    setResult(scheduleDay({ date, definitions, categories: categoryMap, window: w }))
-  }
+  // 対象日を選ぶと自動で 1 日分を組み立てる（24時間表示）。
+  const result = useMemo(
+    () => scheduleDay({ date, definitions, categories: categoryMap, window: DAY_WINDOW }),
+    [date, definitions, categoryMap],
+  )
 
   return (
     <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-700">
@@ -157,47 +155,29 @@ export function DaySchedule() {
           <label className={fieldLabel}>対象日</label>
           <input type="date" className={timeInputClass} value={date} onChange={(e) => setDate(e.target.value)} />
         </div>
-        <div>
-          <label className={fieldLabel}>稼働開始</label>
-          <input type="time" className={timeInputClass} value={startTime} onChange={(e) => setStartTime(e.target.value)} />
-        </div>
-        <div>
-          <label className={fieldLabel}>稼働終了</label>
-          <input type="time" className={timeInputClass} value={endTime} onChange={(e) => setEndTime(e.target.value)} />
-        </div>
-        <button
-          className="rounded bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700"
-          onClick={run}
-        >
-          自動配置
-        </button>
       </div>
 
-      {result === null ? (
-        <p className="text-sm text-gray-500">「自動配置」を押すと、その日の予定を自動で組み立てます。</p>
-      ) : (
-        <div className="space-y-3">
-          {result.timeline.length === 0 ? (
-            <p className="text-sm text-gray-500">この日に配置された予定はありません。</p>
-          ) : (
-            <DayGrid timeline={result.timeline} window={window} categories={categoryMap} />
-          )}
+      <div className="space-y-3">
+        {result.timeline.length === 0 ? (
+          <p className="text-sm text-gray-500">この日に配置された予定はありません。</p>
+        ) : (
+          <DayGrid timeline={result.timeline} window={DAY_WINDOW} categories={categoryMap} />
+        )}
 
-          {result.unplaced.length > 0 && (
-            <div className="rounded border border-red-200 bg-red-50 p-3 text-sm dark:border-red-900 dark:bg-red-950/40">
-              <p className="mb-1 font-semibold text-red-700 dark:text-red-300">未配置のタスク</p>
-              <ul className="space-y-0.5">
-                {result.unplaced.map((u) => (
-                  <li key={u.task.id} className="text-red-700 dark:text-red-300">
-                    {u.task.name}
-                    <span className="ml-2 text-xs">（{REASON_LABEL[u.reason]}）</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
-      )}
+        {result.unplaced.length > 0 && (
+          <div className="rounded border border-red-200 bg-red-50 p-3 text-sm dark:border-red-900 dark:bg-red-950/40">
+            <p className="mb-1 font-semibold text-red-700 dark:text-red-300">未配置のタスク</p>
+            <ul className="space-y-0.5">
+              {result.unplaced.map((u) => (
+                <li key={u.task.id} className="text-red-700 dark:text-red-300">
+                  {u.task.name}
+                  <span className="ml-2 text-xs">（{REASON_LABEL[u.reason]}）</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
