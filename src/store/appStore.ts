@@ -34,6 +34,27 @@ function loadMinimalMode(): boolean {
   }
 }
 
+/** 通知設定（§16）の永続化キー。起動中限定通知のためのユーザー設定。 */
+const NOTIFY_ENABLED_KEY = 'schedule-app.notifyEnabled'
+const NOTIFY_BEFORE_KEY = 'schedule-app.notifyBeforeMinutes'
+
+function loadNotifyEnabled(): boolean {
+  try {
+    return localStorage.getItem(NOTIFY_ENABLED_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+function loadNotifyBefore(): number {
+  try {
+    const v = Number(localStorage.getItem(NOTIFY_BEFORE_KEY))
+    return Number.isFinite(v) && v >= 0 ? v : 5
+  } catch {
+    return 5
+  }
+}
+
 /** 初期カテゴリ（§8.1）と既定色。最上位カテゴリとして投入する。 */
 const DEFAULT_CATEGORY_SEEDS: { name: string; color: string }[] = [
   { name: '学校', color: '#3b82f6' },
@@ -74,11 +95,19 @@ interface AppState {
   projects: Project[]
   /** 最低限モード（§23）。表示・入力を簡略化する（内部データ・計算は共通）。 */
   minimalMode: boolean
+  /** 起動中の通知（§16）を有効にするか。既定 false（ユーザーの明示的な許可が必要）。 */
+  notifyEnabled: boolean
+  /** 開始前通知の分数（§16.1、既定5分）。 */
+  notifyBeforeMinutes: number
 
   /** 永続化層から全データを読み込む（初回は初期カテゴリを投入）。 */
   init(): Promise<void>
   /** 最低限モードを切り替える（localStorage に保持）。 */
   setMinimalMode(value: boolean): void
+  /** 起動中の通知の有効/無効を切り替える（localStorage に保持）。 */
+  setNotifyEnabled(value: boolean): void
+  /** 開始前通知の分数を設定する（localStorage に保持）。 */
+  setNotifyBeforeMinutes(value: number): void
   /** 予定定義を追加または更新して永続化する。 */
   saveDefinition(def: ScheduleDefinition): Promise<void>
   /** 予定定義を削除する。 */
@@ -115,6 +144,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   goals: [],
   projects: [],
   minimalMode: loadMinimalMode(),
+  notifyEnabled: loadNotifyEnabled(),
+  notifyBeforeMinutes: loadNotifyBefore(),
 
   setMinimalMode(value) {
     try {
@@ -123,6 +154,25 @@ export const useAppStore = create<AppState>((set, get) => ({
       // localStorage 不可でも状態は更新する。
     }
     set({ minimalMode: value })
+  },
+
+  setNotifyEnabled(value) {
+    try {
+      localStorage.setItem(NOTIFY_ENABLED_KEY, value ? '1' : '0')
+    } catch {
+      // 無視して状態のみ更新。
+    }
+    set({ notifyEnabled: value })
+  },
+
+  setNotifyBeforeMinutes(value) {
+    const v = Number.isFinite(value) && value >= 0 ? value : 5
+    try {
+      localStorage.setItem(NOTIFY_BEFORE_KEY, String(v))
+    } catch {
+      // 無視して状態のみ更新。
+    }
+    set({ notifyBeforeMinutes: v })
   },
 
   async init() {

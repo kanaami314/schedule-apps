@@ -9,6 +9,7 @@ import { Reflection } from './features/schedule/Reflection'
 import { BalanceAnalysis } from './features/schedule/BalanceAnalysis'
 import { CalendarView } from './features/schedule/CalendarView'
 import { GoalProjectManager } from './features/schedule/GoalProjectManager'
+import { NotificationCenter } from './features/schedule/NotificationCenter'
 
 function App() {
   const init = useAppStore((s) => s.init)
@@ -41,6 +42,10 @@ function App() {
           <section>
             <h2 className="mb-3 text-lg font-semibold">ホーム</h2>
             <Home />
+          </section>
+          <section>
+            <h2 className="mb-3 text-lg font-semibold">通知</h2>
+            <NotificationCenter />
           </section>
           <ScheduleManager />
           <section>
