@@ -4,10 +4,11 @@
  * 真のバックグラウンド通知へ拡張する。通知ロジックはデータとして保持している。
  *
  * 実装範囲:
- * - 通知欄(§16.7): 未配置タスク・〆切間近タスクを画面内テキストで表示（OS許可不要・常時）。
+ * - 通知欄(§16.7): 未配置・期限超過(§16.4)・〆切間近タスクを画面内テキストで表示（OS許可不要・常時）。
  * - 起動中のOS通知: 当日の各予定の 準備開始/移動開始/開始前/開始時刻 を、有効化かつ
  *   通知許可があるときに配信（§16.1/§16.2）。個別予定で無効化されたものは除外。
- * 終了通知(§16.3)・期限超過(§16.4)・振り返り通知(§16.8) 等は今後（[[project-status]]）。
+ * - 日次振り返りリマインダ(§16.8): 設定時刻（既定22:00）に起動中なら通知。
+ * 終了通知(§16.3、完了/未完了アクション付き) は Service Worker が必要で今後（[[project-status]]）。
  */
 
 import { useEffect, useMemo, useState } from 'react'
@@ -37,10 +38,13 @@ function todayIso(now: Date): string {
 export function NotificationCenter() {
   const definitions = useAppStore((s) => s.definitions)
   const categories = useAppStore((s) => s.categories)
+  const records = useAppStore((s) => s.records)
   const notifyEnabled = useAppStore((s) => s.notifyEnabled)
   const setNotifyEnabled = useAppStore((s) => s.setNotifyEnabled)
   const beforeMinutes = useAppStore((s) => s.notifyBeforeMinutes)
   const setBeforeMinutes = useAppStore((s) => s.setNotifyBeforeMinutes)
+  const reflectionTime = useAppStore((s) => s.notifyReflectionTime)
+  const setReflectionTime = useAppStore((s) => s.setNotifyReflectionTime)
 
   const supported = typeof Notification !== 'undefined'
   const [permission, setPermission] = useState<NotificationPermission>(
@@ -64,14 +68,39 @@ export function NotificationCenter() {
     [date, definitions, categoryMap],
   )
 
-  // §16.4: 〆切間近の柔軟タスク（残り D 日以内）。
+  // §16.4: 〆切間近の柔軟タスク（残り D 日以内、期限超過は除く）。
   const deadlineNear = useMemo(() => {
     const now = Date.now()
     return definitions
       .filter((d): d is FlexibleTask => d.kind === 'flexible')
-      .filter((t) => (Date.parse(t.deadline) - now) / 86_400_000 <= DEADLINE_NEAR_DAYS)
+      .filter((t) => {
+        const remainingDays = (Date.parse(t.deadline) - now) / 86_400_000
+        return remainingDays >= 0 && remainingDays <= DEADLINE_NEAR_DAYS
+      })
       .sort((a, b) => Date.parse(a.deadline) - Date.parse(b.deadline))
   }, [definitions])
+
+  // §16.4: 期限超過。期限を過ぎ、完了しておらず、実績時間が推定所要に達していない柔軟タスク。
+  const overdue = useMemo(() => {
+    const now = Date.now()
+    return definitions
+      .filter((d): d is FlexibleTask => d.kind === 'flexible')
+      .filter((t) => {
+        if (Date.parse(t.deadline) >= now) return false
+        const recs = records.filter((r) => r.sourceId === t.id)
+        if (recs.some((r) => r.status === 'completed')) return false
+        const actualSum = recs.reduce(
+          (s, r) =>
+            s +
+            (r.actualStart && r.actualEnd
+              ? Math.max(0, (Date.parse(r.actualEnd) - Date.parse(r.actualStart)) / 60_000)
+              : 0),
+          0,
+        )
+        return actualSum < t.estimatedDuration
+      })
+      .sort((a, b) => Date.parse(a.deadline) - Date.parse(b.deadline))
+  }, [definitions, records])
 
   // OS通知の入力（当日の各予定）。個別に無効化された予定は除外（§16 優先順位）。
   const notifyInputs = useMemo<PlanNotifyInput[]>(() => {
@@ -114,6 +143,25 @@ export function NotificationCenter() {
     return () => timers.forEach((t) => clearTimeout(t))
   }, [notifyEnabled, supported, notifyInputs])
 
+  // §16.8: 日次振り返りのリマインダを設定時刻に通知する（起動中のみ）。
+  useEffect(() => {
+    if (!notifyEnabled || !supported || Notification.permission !== 'granted') return
+    const [h, m] = reflectionTime.split(':').map(Number)
+    const now = new Date()
+    const target = new Date(now)
+    target.setHours(h, m, 0, 0)
+    const delay = target.getTime() - now.getTime()
+    if (delay < 0) return // 今日の予定時刻を過ぎていれば今日は通知しない。
+    const timer = window.setTimeout(() => {
+      try {
+        new Notification('日次振り返り', { body: '今日の振り返りを記録しましょう' })
+      } catch {
+        // 無視。
+      }
+    }, delay)
+    return () => clearTimeout(timer)
+  }, [notifyEnabled, supported, reflectionTime])
+
   async function toggle(value: boolean) {
     if (value && supported && Notification.permission === 'default') {
       const result = await Notification.requestPermission()
@@ -122,7 +170,7 @@ export function NotificationCenter() {
     setNotifyEnabled(value)
   }
 
-  const noticeCount = unplaced.length + deadlineNear.length
+  const noticeCount = unplaced.length + overdue.length + deadlineNear.length
 
   return (
     <div className={cardClass}>
@@ -143,6 +191,15 @@ export function NotificationCenter() {
           />
           分
         </label>
+        <label className="flex items-center gap-1 text-sm text-gray-600 dark:text-gray-300">
+          振り返り
+          <input
+            type="time"
+            className="rounded border border-gray-300 px-1 py-0.5 text-sm dark:border-gray-600 dark:bg-gray-800"
+            value={reflectionTime}
+            onChange={(e) => setReflectionTime(e.target.value)}
+          />
+        </label>
         {notifyEnabled && supported && permission !== 'granted' && (
           <span className="text-xs text-amber-600 dark:text-amber-400">
             ブラウザの通知許可が必要です（許可されるまでOS通知は出ません）
@@ -162,6 +219,11 @@ export function NotificationCenter() {
         <p className="text-xs text-gray-400">今日の通知はありません。</p>
       ) : (
         <ul className="space-y-1 text-sm">
+          {overdue.map((t) => (
+            <li key={`o-${t.id}`} className="font-medium text-red-700 dark:text-red-300">
+              🚨 期限超過: {t.name}（{t.deadline.replace('T', ' ')}）
+            </li>
+          ))}
           {unplaced.map((u) => (
             <li key={`u-${u.task.id}`} className="text-red-600 dark:text-red-400">
               ⚠ 未配置: {u.task.name}

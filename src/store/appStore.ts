@@ -37,6 +37,7 @@ function loadMinimalMode(): boolean {
 /** 通知設定（§16）の永続化キー。起動中限定通知のためのユーザー設定。 */
 const NOTIFY_ENABLED_KEY = 'schedule-app.notifyEnabled'
 const NOTIFY_BEFORE_KEY = 'schedule-app.notifyBeforeMinutes'
+const NOTIFY_REFLECTION_KEY = 'schedule-app.notifyReflectionTime'
 
 function loadNotifyEnabled(): boolean {
   try {
@@ -52,6 +53,15 @@ function loadNotifyBefore(): number {
     return Number.isFinite(v) && v >= 0 ? v : 5
   } catch {
     return 5
+  }
+}
+
+function loadNotifyReflectionTime(): string {
+  try {
+    const v = localStorage.getItem(NOTIFY_REFLECTION_KEY)
+    return v && /^\d{2}:\d{2}$/.test(v) ? v : '22:00'
+  } catch {
+    return '22:00'
   }
 }
 
@@ -99,6 +109,8 @@ interface AppState {
   notifyEnabled: boolean
   /** 開始前通知の分数（§16.1、既定5分）。 */
   notifyBeforeMinutes: number
+  /** 日次振り返り通知の時刻（§16.8、`HH:mm`、既定22:00）。 */
+  notifyReflectionTime: string
 
   /** 永続化層から全データを読み込む（初回は初期カテゴリを投入）。 */
   init(): Promise<void>
@@ -108,6 +120,8 @@ interface AppState {
   setNotifyEnabled(value: boolean): void
   /** 開始前通知の分数を設定する（localStorage に保持）。 */
   setNotifyBeforeMinutes(value: number): void
+  /** 日次振り返り通知の時刻を設定する（localStorage に保持）。 */
+  setNotifyReflectionTime(value: string): void
   /** 予定定義を追加または更新して永続化する。 */
   saveDefinition(def: ScheduleDefinition): Promise<void>
   /** 予定定義を削除する。 */
@@ -146,6 +160,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   minimalMode: loadMinimalMode(),
   notifyEnabled: loadNotifyEnabled(),
   notifyBeforeMinutes: loadNotifyBefore(),
+  notifyReflectionTime: loadNotifyReflectionTime(),
 
   setMinimalMode(value) {
     try {
@@ -173,6 +188,16 @@ export const useAppStore = create<AppState>((set, get) => ({
       // 無視して状態のみ更新。
     }
     set({ notifyBeforeMinutes: v })
+  },
+
+  setNotifyReflectionTime(value) {
+    const v = /^\d{2}:\d{2}$/.test(value) ? value : '22:00'
+    try {
+      localStorage.setItem(NOTIFY_REFLECTION_KEY, v)
+    } catch {
+      // 無視して状態のみ更新。
+    }
+    set({ notifyReflectionTime: v })
   },
 
   async init() {
