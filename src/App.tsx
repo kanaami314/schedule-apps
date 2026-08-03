@@ -4,6 +4,7 @@ import { ScheduleManager } from './features/schedule/ScheduleManager'
 import { DaySchedule } from './features/schedule/DaySchedule'
 import { CategoryManager } from './features/schedule/CategoryManager'
 import { TaskList } from './features/schedule/TaskList'
+import { Home } from './features/schedule/Home'
 
 function App() {
   const init = useAppStore((s) => s.init)
@@ -21,6 +22,10 @@ function App() {
       </header>
       {loaded ? (
         <div className="space-y-8">
+          <section>
+            <h2 className="mb-3 text-lg font-semibold">ホーム</h2>
+            <Home />
+          </section>
           <ScheduleManager />
           <section>
             <h2 className="mb-3 text-lg font-semibold">カテゴリ</h2>
