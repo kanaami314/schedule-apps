@@ -118,6 +118,7 @@ function Wishlist() {
 export function TaskList() {
   const definitions = useAppStore((s) => s.definitions)
   const categories = useAppStore((s) => s.categories)
+  const minimalMode = useAppStore((s) => s.minimalMode)
   const categoryName = useMemo(
     () => new Map(categories.map((c) => [c.id, c.name])),
     [categories],
@@ -160,7 +161,7 @@ export function TaskList() {
     return (
       <div className="space-y-4">
         <p className="text-sm text-gray-500">柔軟なタスクがありません。</p>
-        <Wishlist />
+        {!minimalMode && <Wishlist />}
       </div>
     )
   }
@@ -217,7 +218,7 @@ export function TaskList() {
         ))}
       </div>
 
-      <Wishlist />
+      {!minimalMode && <Wishlist />}
     </div>
   )
 }

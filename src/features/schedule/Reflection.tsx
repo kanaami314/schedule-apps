@@ -60,6 +60,12 @@ export function Reflection() {
   const records = useAppStore((s) => s.records)
   const reflections = useAppStore((s) => s.reflections)
   const saveReflection = useAppStore((s) => s.saveReflection)
+  const minimalMode = useAppStore((s) => s.minimalMode)
+
+  // 最低限モードは 集中状態・気分・自由記述 のみ（§23.5）。
+  const fields = minimalMode
+    ? REFLECTION_FIELDS.filter((f) => f.key === 'focus' || f.key === 'mood')
+    : REFLECTION_FIELDS
 
   const [date, setDate] = useState(todayIso())
   const [draft, setDraft] = useState<Partial<Record<ReflectionField, string>>>({})
@@ -154,7 +160,7 @@ export function Reflection() {
       <div className={cardClass}>
         <h3 className="mb-3 text-sm font-semibold">振り返り（任意）</h3>
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          {REFLECTION_FIELDS.map((field) => (
+          {fields.map((field) => (
             <div key={field.key}>
               <label className={labelClass}>{field.label}</label>
               <select

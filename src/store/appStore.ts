@@ -23,6 +23,17 @@ const repository: AppRepository = createDexieRepository()
 /** init の重複実行を防ぐ（StrictMode の二重呼び出し対策）。 */
 let initPromise: Promise<void> | null = null
 
+/** 最低限モード（§23）の永続化キー。テーブルではなく localStorage に保持する。 */
+const MINIMAL_MODE_KEY = 'schedule-app.minimalMode'
+
+function loadMinimalMode(): boolean {
+  try {
+    return localStorage.getItem(MINIMAL_MODE_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
 /** 初期カテゴリ（§8.1）と既定色。最上位カテゴリとして投入する。 */
 const DEFAULT_CATEGORY_SEEDS: { name: string; color: string }[] = [
   { name: '学校', color: '#3b82f6' },
@@ -61,9 +72,13 @@ interface AppState {
   goals: LongTermGoal[]
   /** プロジェクト（§9）。 */
   projects: Project[]
+  /** 最低限モード（§23）。表示・入力を簡略化する（内部データ・計算は共通）。 */
+  minimalMode: boolean
 
   /** 永続化層から全データを読み込む（初回は初期カテゴリを投入）。 */
   init(): Promise<void>
+  /** 最低限モードを切り替える（localStorage に保持）。 */
+  setMinimalMode(value: boolean): void
   /** 予定定義を追加または更新して永続化する。 */
   saveDefinition(def: ScheduleDefinition): Promise<void>
   /** 予定定義を削除する。 */
@@ -99,6 +114,16 @@ export const useAppStore = create<AppState>((set, get) => ({
   wishlist: [],
   goals: [],
   projects: [],
+  minimalMode: loadMinimalMode(),
+
+  setMinimalMode(value) {
+    try {
+      localStorage.setItem(MINIMAL_MODE_KEY, value ? '1' : '0')
+    } catch {
+      // localStorage 不可でも状態は更新する。
+    }
+    set({ minimalMode: value })
+  },
 
   async init() {
     // 重複呼び出しは同じ Promise を返し、二重投入を防ぐ。

@@ -13,6 +13,8 @@ import { GoalProjectManager } from './features/schedule/GoalProjectManager'
 function App() {
   const init = useAppStore((s) => s.init)
   const loaded = useAppStore((s) => s.loaded)
+  const minimalMode = useAppStore((s) => s.minimalMode)
+  const setMinimalMode = useAppStore((s) => s.setMinimalMode)
 
   useEffect(() => {
     void init()
@@ -20,9 +22,19 @@ function App() {
 
   return (
     <div className="mx-auto max-w-4xl p-6">
-      <header className="mb-6">
-        <h1 className="text-2xl font-bold">タイムスケジューラ</h1>
-        <p className="text-sm text-gray-500">予定を登録すると IndexedDB に保存されます。</p>
+      <header className="mb-6 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold">タイムスケジューラ</h1>
+          <p className="text-sm text-gray-500">予定を登録すると IndexedDB に保存されます。</p>
+        </div>
+        <label className="flex shrink-0 items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+          <input
+            type="checkbox"
+            checked={minimalMode}
+            onChange={(e) => setMinimalMode(e.target.checked)}
+          />
+          最低限モード
+        </label>
       </header>
       {loaded ? (
         <div className="space-y-8">
@@ -35,10 +47,12 @@ function App() {
             <h2 className="mb-3 text-lg font-semibold">カテゴリ</h2>
             <CategoryManager />
           </section>
-          <section>
-            <h2 className="mb-3 text-lg font-semibold">長期目標・プロジェクト</h2>
-            <GoalProjectManager />
-          </section>
+          {!minimalMode && (
+            <section>
+              <h2 className="mb-3 text-lg font-semibold">長期目標・プロジェクト</h2>
+              <GoalProjectManager />
+            </section>
+          )}
           <section>
             <h2 className="mb-3 text-lg font-semibold">タスク一覧</h2>
             <TaskList />

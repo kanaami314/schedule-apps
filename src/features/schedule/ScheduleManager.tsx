@@ -86,6 +86,7 @@ interface EditFormProps {
 
 function FixedEventForm({ editing, onDone }: EditFormProps) {
   const saveDefinition = useAppStore((s) => s.saveDefinition)
+  const minimalMode = useAppStore((s) => s.minimalMode)
   const target = editing?.kind === 'fixed' ? editing : null
   const [name, setName] = useState('')
   const [date, setDate] = useState('')
@@ -246,43 +247,45 @@ function FixedEventForm({ editing, onDone }: EditFormProps) {
             </div>
           )}
         </div>
-        <div>
-          <label className={labelClass}>付随時間（分, §4.4）</label>
-          <div className="flex gap-2">
-            <div className="flex-1">
-              <span className="text-[10px] text-gray-400">移動</span>
-              <input
-                type="number"
-                min={0}
-                className={inputClass}
-                value={travelMin}
-                onChange={(e) => setTravelMin(Number(e.target.value))}
-              />
-            </div>
-            <div className="flex-1">
-              <span className="text-[10px] text-gray-400">準備</span>
-              <input
-                type="number"
-                min={0}
-                className={inputClass}
-                value={prepMin}
-                onChange={(e) => setPrepMin(Number(e.target.value))}
-              />
-            </div>
-            <div className="flex-1">
-              <span className="text-[10px] text-gray-400">終了後</span>
-              <input
-                type="number"
-                min={0}
-                className={inputClass}
-                value={bufferMin}
-                onChange={(e) => setBufferMin(Number(e.target.value))}
-              />
+        {!minimalMode && (
+          <div>
+            <label className={labelClass}>付随時間（分, §4.4）</label>
+            <div className="flex gap-2">
+              <div className="flex-1">
+                <span className="text-[10px] text-gray-400">移動</span>
+                <input
+                  type="number"
+                  min={0}
+                  className={inputClass}
+                  value={travelMin}
+                  onChange={(e) => setTravelMin(Number(e.target.value))}
+                />
+              </div>
+              <div className="flex-1">
+                <span className="text-[10px] text-gray-400">準備</span>
+                <input
+                  type="number"
+                  min={0}
+                  className={inputClass}
+                  value={prepMin}
+                  onChange={(e) => setPrepMin(Number(e.target.value))}
+                />
+              </div>
+              <div className="flex-1">
+                <span className="text-[10px] text-gray-400">終了後</span>
+                <input
+                  type="number"
+                  min={0}
+                  className={inputClass}
+                  value={bufferMin}
+                  onChange={(e) => setBufferMin(Number(e.target.value))}
+                />
+              </div>
             </div>
           </div>
-        </div>
+        )}
         <CategorySelect value={categoryId} onChange={setCategoryId} />
-        <LoadFields value={load} onChange={setLoad} />
+        {!minimalMode && <LoadFields value={load} onChange={setLoad} />}
         <div className="flex gap-2">
           <button className={buttonClass} disabled={!canSubmit} onClick={submit}>
             {target ? '更新' : '追加'}
@@ -300,6 +303,7 @@ function FixedEventForm({ editing, onDone }: EditFormProps) {
 
 function FlexibleTaskForm({ editing, onDone }: EditFormProps) {
   const saveDefinition = useAppStore((s) => s.saveDefinition)
+  const minimalMode = useAppStore((s) => s.minimalMode)
   const target = editing?.kind === 'flexible' ? editing : null
   const [name, setName] = useState('')
   const [deadline, setDeadline] = useState('')
@@ -396,7 +400,7 @@ function FlexibleTaskForm({ editing, onDone }: EditFormProps) {
           </div>
         </div>
         <CategorySelect value={categoryId} onChange={setCategoryId} />
-        <LoadFields value={load} onChange={setLoad} />
+        {!minimalMode && <LoadFields value={load} onChange={setLoad} />}
         <div className="flex gap-2">
           <button className={buttonClass} disabled={!canSubmit} onClick={submit}>
             {target ? '更新' : '追加'}
@@ -465,12 +469,18 @@ function DefinitionList({
 }) {
   const definitions = useAppStore((s) => s.definitions)
   const removeDefinition = useAppStore((s) => s.removeDefinition)
+  const minimalMode = useAppStore((s) => s.minimalMode)
 
-  if (definitions.length === 0) {
+  // 最低限モードでは固定予定・柔軟なタスクのみ表示（§23.1、データは保持）。
+  const visible = minimalMode
+    ? definitions.filter((d) => d.kind === 'fixed' || d.kind === 'flexible')
+    : definitions
+
+  if (visible.length === 0) {
     return <p className="text-sm text-gray-500">まだ予定がありません。左のフォームから追加してください。</p>
   }
 
-  const sorted = [...definitions].sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+  const sorted = [...visible].sort((a, b) => a.createdAt.localeCompare(b.createdAt))
 
   return (
     <ul className="space-y-2">
@@ -511,14 +521,16 @@ function DefinitionList({
 
 export function ScheduleManager() {
   const [editing, setEditing] = useState<ScheduleDefinition | null>(null)
+  const minimalMode = useAppStore((s) => s.minimalMode)
 
   return (
     <div className="grid gap-6 md:grid-cols-2">
       <div className="space-y-4">
         <FixedEventForm editing={editing} onDone={() => setEditing(null)} />
         <FlexibleTaskForm editing={editing} onDone={() => setEditing(null)} />
-        <FreeActivityForm editing={editing} onDone={() => setEditing(null)} />
-        <RoutineForm editing={editing} onDone={() => setEditing(null)} />
+        {/* 最低限モードでは自由活動・生活ルーチンの入力を隠す（§23.1）。 */}
+        {!minimalMode && <FreeActivityForm editing={editing} onDone={() => setEditing(null)} />}
+        {!minimalMode && <RoutineForm editing={editing} onDone={() => setEditing(null)} />}
       </div>
       <div>
         <h3 className="mb-3 font-semibold">登録済みの予定</h3>
