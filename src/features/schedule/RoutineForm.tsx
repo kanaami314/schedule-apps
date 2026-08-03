@@ -1,10 +1,11 @@
 /**
- * 生活ルーチンの作成フォーム（§7）。
+ * 生活ルーチンの作成・編集フォーム（§7）。
  * 種類（食事/入浴/睡眠/家事）と、1日あたりの各回（実行可能時間帯＋必要時間）を設定する。
+ * `editing` に生活ルーチンが渡されたら編集モード（id・createdAt を維持して更新）。
  */
 
-import { useState } from 'react'
-import type { LifeRoutine, RoutineType } from '../../domain/types'
+import { useEffect, useState } from 'react'
+import type { LifeRoutine, RoutineType, ScheduleDefinition } from '../../domain/types'
 import { useAppStore } from '../../store/appStore'
 import { newId, nowLocalIso } from '../../lib/ids'
 
@@ -27,11 +28,31 @@ interface OccurrenceInput {
 
 const defaultOccurrence = (): OccurrenceInput => ({ start: '12:00', end: '14:00', requiredTime: 30 })
 
-export function RoutineForm() {
+interface RoutineFormProps {
+  editing: ScheduleDefinition | null
+  onDone: () => void
+}
+
+export function RoutineForm({ editing, onDone }: RoutineFormProps) {
   const saveDefinition = useAppStore((s) => s.saveDefinition)
+  const target = editing?.kind === 'routine' ? editing : null
   const [routineType, setRoutineType] = useState<RoutineType>('meal')
   const [name, setName] = useState('')
   const [occurrences, setOccurrences] = useState<OccurrenceInput[]>([defaultOccurrence()])
+
+  // 編集対象が変わったらフォームへ読み込む。
+  useEffect(() => {
+    if (!target) return
+    setRoutineType(target.routineType)
+    setName(target.name ?? '')
+    setOccurrences(
+      target.occurrences.map((o) => ({
+        start: o.allowedRange.start,
+        end: o.allowedRange.end,
+        requiredTime: o.requiredTime,
+      })),
+    )
+  }, [target])
 
   const canSubmit = occurrences.every((o) => o.start < o.end && o.requiredTime > 0)
 
@@ -39,12 +60,19 @@ export function RoutineForm() {
     setOccurrences((prev) => prev.map((o, i) => (i === index ? { ...o, ...patch } : o)))
   }
 
+  function reset() {
+    setRoutineType('meal')
+    setName('')
+    setOccurrences([defaultOccurrence()])
+  }
+
   async function submit() {
     const now = nowLocalIso()
     const routine: LifeRoutine = {
-      id: newId(),
+      ...(target ?? {}),
+      id: target?.id ?? newId(),
       kind: 'routine',
-      createdAt: now,
+      createdAt: target?.createdAt ?? now,
       updatedAt: now,
       routineType,
       name: name.trim() || undefined,
@@ -54,13 +82,18 @@ export function RoutineForm() {
       })),
     }
     await saveDefinition(routine)
-    setName('')
-    setOccurrences([defaultOccurrence()])
+    reset()
+    onDone()
+  }
+
+  function cancel() {
+    reset()
+    onDone()
   }
 
   return (
     <div className="rounded-lg border border-gray-200 p-4 dark:border-gray-700">
-      <h3 className="mb-3 font-semibold">生活ルーチンを追加</h3>
+      <h3 className="mb-3 font-semibold">{target ? '生活ルーチンを編集' : '生活ルーチンを追加'}</h3>
       <div className="space-y-2">
         <div className="flex gap-2">
           <div className="flex-1">
@@ -128,13 +161,23 @@ export function RoutineForm() {
           </button>
         </div>
 
-        <button
-          className="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-40"
-          disabled={!canSubmit}
-          onClick={submit}
-        >
-          追加
-        </button>
+        <div className="flex gap-2">
+          <button
+            className="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-40"
+            disabled={!canSubmit}
+            onClick={submit}
+          >
+            {target ? '更新' : '追加'}
+          </button>
+          {target && (
+            <button
+              className="rounded border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
+              onClick={cancel}
+            >
+              キャンセル
+            </button>
+          )}
+        </div>
       </div>
     </div>
   )

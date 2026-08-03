@@ -1,10 +1,11 @@
 /**
- * 自由活動の作成フォーム（§6）。
+ * 自由活動の作成・編集フォーム（§6）。
  * 活動名・活動時間・カテゴリ・場所と、回復効果/消耗効果および各効果の強度を登録する。
  * 負荷への反映ロジックは `domain/load/freeActivity.ts`（実装済）が担う。
+ * `editing` に自由活動が渡されたら編集モード（id・createdAt を維持して更新）。
  */
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type {
   DrainEffect,
   DrainEffectSetting,
@@ -12,6 +13,7 @@ import type {
   Intensity,
   RecoveryEffect,
   RecoveryEffectSetting,
+  ScheduleDefinition,
 } from '../../domain/types'
 import { useAppStore } from '../../store/appStore'
 import { newId, nowLocalIso } from '../../lib/ids'
@@ -56,6 +58,16 @@ function initEffects<K extends string>(keys: readonly K[]): Record<K, EffectStat
   >
 }
 
+/** 保存済みの効果設定配列を、フォーム状態（キーごとの on/強度）へ変換する。 */
+function effectsFromSettings<K extends string>(
+  keys: readonly K[],
+  settings: readonly { effect: K; intensity: Intensity }[] | undefined,
+): Record<K, EffectState> {
+  const base = initEffects(keys)
+  for (const s of settings ?? []) base[s.effect] = { on: true, intensity: s.intensity }
+  return base
+}
+
 /** 効果1件の行（チェックボックス＋強度）。 */
 function EffectRow({
   label,
@@ -90,14 +102,31 @@ function EffectRow({
   )
 }
 
-export function FreeActivityForm() {
+interface FreeActivityFormProps {
+  editing: ScheduleDefinition | null
+  onDone: () => void
+}
+
+export function FreeActivityForm({ editing, onDone }: FreeActivityFormProps) {
   const saveDefinition = useAppStore((s) => s.saveDefinition)
+  const target = editing?.kind === 'free' ? editing : null
   const [name, setName] = useState('')
   const [duration, setDuration] = useState(60)
   const [categoryId, setCategoryId] = useState('')
   const [place, setPlace] = useState('')
   const [recovery, setRecovery] = useState(() => initEffects(RECOVERY_EFFECTS))
   const [drain, setDrain] = useState(() => initEffects(DRAIN_EFFECTS))
+
+  // 編集対象が変わったらフォームへ読み込む。
+  useEffect(() => {
+    if (!target) return
+    setName(target.name)
+    setDuration(target.duration)
+    setCategoryId(target.categoryId ?? '')
+    setPlace(target.place ?? '')
+    setRecovery(effectsFromSettings(RECOVERY_EFFECTS, target.recoveryEffects))
+    setDrain(effectsFromSettings(DRAIN_EFFECTS, target.drainEffects))
+  }, [target])
 
   const canSubmit = name.trim() !== '' && duration > 0
 
@@ -120,9 +149,10 @@ export function FreeActivityForm() {
       intensity: drain[e].intensity,
     }))
     const activity: FreeActivity = {
-      id: newId(),
+      ...(target ?? {}),
+      id: target?.id ?? newId(),
       kind: 'free',
-      createdAt: now,
+      createdAt: target?.createdAt ?? now,
       updatedAt: now,
       name: name.trim(),
       duration,
@@ -133,11 +163,17 @@ export function FreeActivityForm() {
     }
     await saveDefinition(activity)
     reset()
+    onDone()
+  }
+
+  function cancel() {
+    reset()
+    onDone()
   }
 
   return (
     <div className={cardClass}>
-      <h3 className="mb-3 font-semibold">自由活動を追加</h3>
+      <h3 className="mb-3 font-semibold">{target ? '自由活動を編集' : '自由活動を追加'}</h3>
       <div className="space-y-2">
         <div>
           <label className={labelClass}>活動名</label>
@@ -189,9 +225,19 @@ export function FreeActivityForm() {
           </div>
         </div>
 
-        <button className={buttonClass} disabled={!canSubmit} onClick={submit}>
-          追加
-        </button>
+        <div className="flex gap-2">
+          <button className={buttonClass} disabled={!canSubmit} onClick={submit}>
+            {target ? '更新' : '追加'}
+          </button>
+          {target && (
+            <button
+              className="rounded border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
+              onClick={cancel}
+            >
+              キャンセル
+            </button>
+          )}
+        </div>
       </div>
     </div>
   )

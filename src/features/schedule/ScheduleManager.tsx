@@ -400,8 +400,13 @@ const KIND_LABEL: Record<ScheduleDefinition['kind'], string> = {
   routine: '生活ルーチン',
 }
 
-/** 一覧から編集できる種別（インラインフォームがあるもの）。 */
-const EDITABLE_KINDS: ReadonlySet<ScheduleDefinition['kind']> = new Set(['fixed', 'flexible'])
+/** 一覧から編集できる種別（インラインフォームがあるもの）。全種別対応。 */
+const EDITABLE_KINDS: ReadonlySet<ScheduleDefinition['kind']> = new Set([
+  'fixed',
+  'flexible',
+  'free',
+  'routine',
+])
 
 function DefinitionList({
   editingId,
@@ -464,8 +469,8 @@ export function ScheduleManager() {
       <div className="space-y-4">
         <FixedEventForm editing={editing} onDone={() => setEditing(null)} />
         <FlexibleTaskForm editing={editing} onDone={() => setEditing(null)} />
-        <FreeActivityForm />
-        <RoutineForm />
+        <FreeActivityForm editing={editing} onDone={() => setEditing(null)} />
+        <RoutineForm editing={editing} onDone={() => setEditing(null)} />
       </div>
       <div>
         <h3 className="mb-3 font-semibold">登録済みの予定</h3>
