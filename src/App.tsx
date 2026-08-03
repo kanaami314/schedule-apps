@@ -6,6 +6,7 @@ import { CategoryManager } from './features/schedule/CategoryManager'
 import { TaskList } from './features/schedule/TaskList'
 import { Home } from './features/schedule/Home'
 import { Reflection } from './features/schedule/Reflection'
+import { BalanceAnalysis } from './features/schedule/BalanceAnalysis'
 
 function App() {
   const init = useAppStore((s) => s.init)
@@ -43,6 +44,10 @@ function App() {
           <section>
             <h2 className="mb-3 text-lg font-semibold">日次振り返り</h2>
             <Reflection />
+          </section>
+          <section>
+            <h2 className="mb-3 text-lg font-semibold">バランス分析</h2>
+            <BalanceAnalysis />
           </section>
         </div>
       ) : (
