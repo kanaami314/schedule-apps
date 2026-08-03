@@ -98,6 +98,59 @@ describe('scheduleDay', () => {
     expect(today.timeline.find((i) => i.sourceId === 't')).toBeDefined()
   })
 
+  it('実行可能曜日に含まれない日は柔軟タスクを配置しない（§5.2）', () => {
+    // 2026-08-05 は水曜(3)。allowedWeekdays に水を含まなければ未配置。
+    const base = { date: DATE, categories: noCategories, window: { start: 540, end: 720 } }
+    const excluded = scheduleDay({
+      ...base,
+      definitions: [flex({ id: 't', estimatedDuration: 60, allowedWeekdays: [1, 2] })], // 月火のみ
+    })
+    expect(excluded.timeline.find((i) => i.sourceId === 't')).toBeUndefined()
+
+    const included = scheduleDay({
+      ...base,
+      definitions: [flex({ id: 't', estimatedDuration: 60, allowedWeekdays: [3] })], // 水
+    })
+    expect(included.timeline.find((i) => i.sourceId === 't')).toBeDefined()
+  })
+
+  it('実行可能時間帯の範囲内にだけ柔軟タスクを配置する（§5.2）', () => {
+    // 窓 8:00-18:00、実行可能時間帯 13:00-14:00 のみ → その中に60分配置。
+    const result = scheduleDay({
+      date: DATE,
+      categories: noCategories,
+      window: { start: 480, end: 1080 },
+      definitions: [
+        flex({
+          id: 't',
+          estimatedDuration: 60,
+          splittable: false,
+          allowedTimeRanges: [{ start: '13:00', end: '14:00' }],
+        }),
+      ],
+    })
+    const task = result.timeline.find((i) => i.sourceId === 't')
+    expect(task?.interval).toEqual({ start: 780, end: 840 }) // 13:00-14:00
+  })
+
+  it('実行可能時間帯に収まらなければ未配置（§5.2）', () => {
+    const result = scheduleDay({
+      date: DATE,
+      categories: noCategories,
+      window: { start: 480, end: 1080 },
+      definitions: [
+        flex({
+          id: 't',
+          estimatedDuration: 90, // 60分枠に入らない
+          splittable: false,
+          allowedTimeRanges: [{ start: '13:00', end: '14:00' }],
+        }),
+      ],
+    })
+    expect(result.timeline.find((i) => i.sourceId === 't')).toBeUndefined()
+    expect(result.unplaced.map((u) => u.task.id)).toContain('t')
+  })
+
   it('兼用可(shareable)の付随時間は占有に含めない（§4.4）', () => {
     const result = scheduleDay({
       date: DATE,

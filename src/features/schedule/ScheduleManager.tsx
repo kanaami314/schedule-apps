@@ -364,6 +364,10 @@ function FlexibleTaskForm({ editing, onDone }: EditFormProps) {
   const [strictness, setStrictness] = useState<DeadlineStrictness>('preferred')
   const [notes, setNotes] = useState('')
   const [tagIds, setTagIds] = useState<Id[]>([])
+  const [allowedWeekdays, setAllowedWeekdays] = useState<Weekday[]>([])
+  const [rangeStart, setRangeStart] = useState('')
+  const [rangeEnd, setRangeEnd] = useState('')
+  const [preferredChunk, setPreferredChunk] = useState(0)
 
   useEffect(() => {
     if (!target) return
@@ -380,6 +384,10 @@ function FlexibleTaskForm({ editing, onDone }: EditFormProps) {
     setStrictness(target.deadlineStrictness ?? 'preferred')
     setNotes(target.notes ?? '')
     setTagIds(target.tagIds ?? [])
+    setAllowedWeekdays(target.allowedWeekdays ? [...target.allowedWeekdays] : [])
+    setRangeStart(target.allowedTimeRanges?.[0]?.start ?? '')
+    setRangeEnd(target.allowedTimeRanges?.[0]?.end ?? '')
+    setPreferredChunk(target.preferredChunk ?? 0)
   }, [target])
 
   // 分割可能なら最短作業時間が条件付き必須（§5.1）。
@@ -400,10 +408,21 @@ function FlexibleTaskForm({ editing, onDone }: EditFormProps) {
     setStrictness('preferred')
     setNotes('')
     setTagIds([])
+    setAllowedWeekdays([])
+    setRangeStart('')
+    setRangeEnd('')
+    setPreferredChunk(0)
+  }
+
+  function toggleAllowedWeekday(day: Weekday) {
+    setAllowedWeekdays((prev) =>
+      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day].sort((a, b) => a - b),
+    )
   }
 
   async function submit() {
     const now = nowLocalIso()
+    const hasRange = rangeStart !== '' && rangeEnd !== '' && rangeStart < rangeEnd
     const task: FlexibleTask = {
       ...(target ?? {}),
       id: target?.id ?? newId(),
@@ -423,6 +442,9 @@ function FlexibleTaskForm({ editing, onDone }: EditFormProps) {
       deadlineStrictness: strictness,
       notes: notes.trim() || undefined,
       tagIds: tagIds.length > 0 ? tagIds : undefined,
+      allowedWeekdays: allowedWeekdays.length > 0 ? allowedWeekdays : undefined,
+      allowedTimeRanges: hasRange ? [{ start: rangeStart, end: rangeEnd }] : undefined,
+      preferredChunk: splittable && preferredChunk > 0 ? preferredChunk : undefined,
     }
     await saveDefinition(task)
     reset()
@@ -515,7 +537,45 @@ function FlexibleTaskForm({ editing, onDone }: EditFormProps) {
               />
             </div>
           )}
+          {splittable && (
+            <div className="flex-1">
+              <label className={labelClass}>希望作業時間（分・任意）</label>
+              <input
+                type="number"
+                min={0}
+                className={inputClass}
+                value={preferredChunk}
+                onChange={(e) => setPreferredChunk(Number(e.target.value))}
+              />
+            </div>
+          )}
         </div>
+        {!minimalMode && (
+          <>
+            <div>
+              <label className={labelClass}>実行可能曜日（任意・未指定なら毎日）</label>
+              <WeekdayPicker selected={allowedWeekdays} onToggle={toggleAllowedWeekday} />
+            </div>
+            <div>
+              <label className={labelClass}>実行可能時間帯（任意）</label>
+              <div className="flex items-center gap-1">
+                <input
+                  type="time"
+                  className={inputClass}
+                  value={rangeStart}
+                  onChange={(e) => setRangeStart(e.target.value)}
+                />
+                <span className="text-xs text-gray-400">〜</span>
+                <input
+                  type="time"
+                  className={inputClass}
+                  value={rangeEnd}
+                  onChange={(e) => setRangeEnd(e.target.value)}
+                />
+              </div>
+            </div>
+          </>
+        )}
         {!minimalMode && (
           <div className="flex gap-2">
             <div className="flex-1">

@@ -10,7 +10,27 @@
  */
 
 import type { FlexibleTask, Id, ResolvedLoad } from '../types'
-import { duration, freeGaps, mergeIntervals, totalDuration, type Interval } from './intervals'
+import {
+  duration,
+  freeGaps,
+  mergeIntervals,
+  timeToMinutes,
+  totalDuration,
+  type Interval,
+} from './intervals'
+
+/** 空き区間の集合を、許可区間の集合と交差させる（§5.2 実行可能時間帯）。 */
+function intersectIntervals(gaps: readonly Interval[], allowed: readonly Interval[]): Interval[] {
+  const out: Interval[] = []
+  for (const g of gaps) {
+    for (const a of allowed) {
+      const start = Math.max(g.start, a.start)
+      const end = Math.min(g.end, a.end)
+      if (end > start) out.push({ start, end })
+    }
+  }
+  return out.sort((x, y) => x.start - y.start)
+}
 
 /** 配置された予定の種類。 */
 export type PlacedKind = 'fixed' | 'routine' | 'flexible' | 'free' | 'break'
@@ -105,7 +125,15 @@ export function placeFlexibleTasks(options: PlaceOptions): PlacementResult {
   const unplaced: Unplaced[] = []
 
   for (const task of options.tasks) {
-    const gaps = freeGaps(options.window, occupied)
+    let gaps = freeGaps(options.window, occupied)
+    // 実行可能時間帯（§5.2）が指定されていれば、その範囲内の空きに限定する。
+    if (task.allowedTimeRanges && task.allowedTimeRanges.length > 0) {
+      const allowed = task.allowedTimeRanges.map((r) => ({
+        start: timeToMinutes(r.start),
+        end: timeToMinutes(r.end),
+      }))
+      gaps = intersectIntervals(gaps, allowed)
+    }
     const result = task.splittable
       ? placeSplittable(task, gaps)
       : placeNonSplittable(task, gaps)
