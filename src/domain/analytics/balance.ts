@@ -102,6 +102,12 @@ export function computeBalance(
   definitions: readonly ScheduleDefinition[],
   categories: ReadonlyMap<Id, Category>,
   records: readonly ActivityRecord[],
+  /**
+   * ドリルダウン対象の親カテゴリ（§20.3）。指定時は、その配下の予定のみを集計し、
+   * 親の直下の子カテゴリ単位でグループ化する（親に直接割当なら親IDのバケットへ）。
+   * 未指定なら従来どおり最上位カテゴリ単位。
+   */
+  drillParentId?: Id,
 ): BalanceResult {
   const dates = periodDates(period, today)
   const recordsByDate = new Map<string, ActivityRecord[]>()
@@ -111,10 +117,17 @@ export function computeBalance(
     recordsByDate.set(r.date, list)
   }
 
-  /** 割り当てカテゴリから最上位カテゴリ ID を得る（§8.4 と同じ基準）。未分類は ''。 */
-  const topLevel = (categoryId: Id | undefined): Id => {
-    const chain = categoryChain(categoryId, categories)
-    return chain[chain.length - 1]?.id ?? ''
+  /**
+   * グループ化キー。未指定時は最上位カテゴリ ID（未分類は ''）。
+   * drillParentId 指定時は、親の直下の子カテゴリ ID（親に直接割当なら親ID、
+   * 配下でなければ null＝集計対象外）。
+   */
+  const groupKey = (categoryId: Id | undefined): Id | null => {
+    const chain = categoryChain(categoryId, categories) // [自身, 親, …, 最上位]
+    if (!drillParentId) return chain[chain.length - 1]?.id ?? ''
+    if (categoryId === drillParentId) return drillParentId // 親に直接割当
+    const child = chain.find((c) => c.parentId === drillParentId)
+    return child ? child.id : null // 親配下でなければ集計しない
   }
 
   const planned = new Map<Id, number>()
@@ -139,7 +152,9 @@ export function computeBalance(
         sleepMinutes += dur(item.interval)
       }
       if (item.kind === 'break') continue
-      add(planned, topLevel(item.categoryId), dur(item.interval))
+      const key = groupKey(item.categoryId)
+      if (key === null) continue // ドリルダウン対象外。
+      add(planned, key, dur(item.interval))
       if (item.load) {
         const minutes = dur(item.interval)
         loadSum.focus += item.load.focus * minutes
@@ -152,7 +167,9 @@ export function computeBalance(
       if (record.status !== 'completed') continue
       const item = itemById.get(record.itemId)
       if (!item) continue
-      add(actual, topLevel(item.categoryId), dur(item.interval))
+      const key = groupKey(item.categoryId)
+      if (key === null) continue
+      add(actual, key, dur(item.interval))
     }
   }
 

@@ -67,15 +67,22 @@ export function BalanceAnalysis() {
   const [period, setPeriod] = useState<BalancePeriod>('thisWeek')
   const [mode, setMode] = useState<Mode>('planned')
   const [denom, setDenom] = useState<Denominator>('total')
+  const [drillParent, setDrillParent] = useState<Id | null>(null)
 
   const categoryMeta = useMemo(
     () => new Map<Id, Category>(categories.map((c) => [c.id, c])),
     [categories],
   )
+  /** 子カテゴリを持つ最上位カテゴリはドリルダウン可能。 */
+  const hasChildren = useMemo(() => {
+    const set = new Set<Id>()
+    for (const c of categories) if (c.parentId) set.add(c.parentId)
+    return set
+  }, [categories])
 
   const result = useMemo(
-    () => computeBalance(period, new Date(), definitions, categoryMeta, records),
-    [period, definitions, categoryMeta, records],
+    () => computeBalance(period, new Date(), definitions, categoryMeta, records, drillParent ?? undefined),
+    [period, definitions, categoryMeta, records, drillParent],
   )
 
   // §20.6: 今週・先週は週間目標、今月は月間目標。今日は目標を使わない。
@@ -137,6 +144,17 @@ export function BalanceAnalysis() {
         </label>
       )}
 
+      {drillParent && (
+        <div className="flex items-center gap-2 text-sm">
+          <button className="text-blue-600 hover:underline" onClick={() => setDrillParent(null)}>
+            ← 戻る
+          </button>
+          <span className="font-medium">
+            {categoryMeta.get(drillParent)?.name ?? ''} の内訳
+          </span>
+        </div>
+      )}
+
       {rows.length === 0 ? (
         <p className="text-sm text-gray-500">この期間に集計対象の予定がありません。</p>
       ) : mode === 'compare' ? (
@@ -175,10 +193,21 @@ export function BalanceAnalysis() {
             const pct = denomValue > 0 ? (v / denomValue) * 100 : 0
             const target = targetField ? meta?.[targetField] : undefined
             const achievement = target && target > 0 ? Math.round((v / target) * 100) : null
+            const drillable = !drillParent && hasChildren.has(c.categoryId)
+            const nameLabel = c.categoryId === drillParent ? '（直接割当）' : (meta?.name ?? '未分類')
             return (
               <div key={c.categoryId || 'none'}>
                 <div className="mb-0.5 flex justify-between text-sm">
-                  <span>{meta?.name ?? '未分類'}</span>
+                  {drillable ? (
+                    <button
+                      className="text-left text-blue-600 hover:underline"
+                      onClick={() => setDrillParent(c.categoryId)}
+                    >
+                      {nameLabel} ▸
+                    </button>
+                  ) : (
+                    <span>{nameLabel}</span>
+                  )}
                   <span className="text-gray-500">
                     {fmtMinutes(v)}・{Math.round(pct)}%
                     {target != null && (

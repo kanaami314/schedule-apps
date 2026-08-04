@@ -85,6 +85,25 @@ describe('computeBalance', () => {
     expect(today.sleepMinutes).toBe(0) // 睡眠ルーチン未登録なので0
   })
 
+  it('ドリルダウン: 親を指定すると子カテゴリ単位で集計する（§20.3）', () => {
+    const categories = new Map<Id, Category>([
+      ['top', category('top', '研究')],
+      ['childA', category('childA', '実験', 'top')],
+      ['childB', category('childB', '執筆', 'top')],
+      ['other', category('other', '趣味')],
+    ])
+    const defs: FixedEvent[] = [
+      fixed('a', '2026-08-03', '09:00', '10:00', 'childA'), // 60分
+      fixed('b', '2026-08-03', '10:00', '11:30', 'childB'), // 90分
+      fixed('c', '2026-08-03', '13:00', '14:00', 'other'), // 対象外
+    ]
+    const result = computeBalance('today', monday, defs, categories, [], 'top')
+    // top 配下の子のみ。other は除外。
+    expect(result.totalPlanned).toBe(150)
+    const byId = Object.fromEntries(result.categories.map((c) => [c.categoryId, c.plannedMinutes]))
+    expect(byId).toEqual({ childA: 60, childB: 90 })
+  })
+
   it('完了記録から実績時間を積み上げる', () => {
     const categories = new Map<Id, Category>([['top', category('top', '研究')]])
     const defs: FixedEvent[] = [fixed('a', '2026-08-03', '09:00', '10:00', 'top')]
