@@ -150,10 +150,33 @@ export function scheduleDay(options: ScheduleDayOptions): ScheduleDayResult {
     referenceTime,
     deadlineNearMinutes: options.deadlineNearMinutes,
   })
+
+  // 関連固定予定の条件（§5.4）を、当日に出現する固定予定の区間から配置制約へ変換する。
+  const fixedIntervalById = new Map(fixedPlacements.map((p) => [p.sourceId, p.interval]))
+  const constraints = new Map<Id, Interval>()
+  for (const task of flexibleTasks) {
+    const link = task.relatedFixed
+    const fixedInterval = link ? fixedIntervalById.get(link.fixedEventId) : undefined
+    if (!link || !fixedInterval) continue // 関連固定予定が当日になければ制約しない。
+    switch (link.condition) {
+      case 'completeBeforeStart':
+      case 'doBeforeStart':
+        // 固定予定の開始までに / 開始前に実行 → 開始時刻より前に配置。
+        constraints.set(task.id, { start: window.start, end: fixedInterval.start })
+        break
+      case 'doAfterEnd':
+      case 'availableAfterEnd':
+        // 固定予定の終了後に実行 / 終了後から実行可能 → 終了時刻以降に配置。
+        constraints.set(task.id, { start: fixedInterval.end, end: window.end })
+        break
+    }
+  }
+
   const { placements: flexiblePlacements, unplaced } = placeFlexibleTasks({
     window,
     busy,
     tasks: ordered,
+    constraints,
   })
 
   // 4. 柔軟タスクの配置に負荷とカテゴリを付与。

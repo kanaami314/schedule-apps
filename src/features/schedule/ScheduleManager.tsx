@@ -12,6 +12,7 @@ import type {
   FlexibleTask,
   Id,
   Priority,
+  RelatedFixedCondition,
   RepeatRule,
   ScheduleDefinition,
   Weekday,
@@ -377,10 +378,20 @@ function FixedEventForm({ editing, onDone }: EditFormProps) {
   )
 }
 
+/** 関連固定予定の実行条件の表示ラベル（§5.4）。 */
+const RELATED_CONDITIONS: { value: RelatedFixedCondition; label: string }[] = [
+  { value: 'completeBeforeStart', label: '開始までに完了する' },
+  { value: 'doBeforeStart', label: '開始前に実行する' },
+  { value: 'doAfterEnd', label: '終了後に実行する' },
+  { value: 'availableAfterEnd', label: '終了後から実行可能' },
+]
+
 function FlexibleTaskForm({ editing, onDone }: EditFormProps) {
   const saveDefinition = useAppStore((s) => s.saveDefinition)
   const minimalMode = useAppStore((s) => s.minimalMode)
   const projects = useAppStore((s) => s.projects)
+  const definitions = useAppStore((s) => s.definitions)
+  const fixedEvents = definitions.filter((d): d is FixedEvent => d.kind === 'fixed')
   const target = editing?.kind === 'flexible' ? editing : null
   const [name, setName] = useState('')
   const [deadline, setDeadline] = useState('')
@@ -399,6 +410,8 @@ function FlexibleTaskForm({ editing, onDone }: EditFormProps) {
   const [rangeStart, setRangeStart] = useState('')
   const [rangeEnd, setRangeEnd] = useState('')
   const [preferredChunk, setPreferredChunk] = useState(0)
+  const [relatedFixedId, setRelatedFixedId] = useState('')
+  const [relatedCondition, setRelatedCondition] = useState<RelatedFixedCondition>('completeBeforeStart')
 
   useEffect(() => {
     if (!target) return
@@ -419,6 +432,8 @@ function FlexibleTaskForm({ editing, onDone }: EditFormProps) {
     setRangeStart(target.allowedTimeRanges?.[0]?.start ?? '')
     setRangeEnd(target.allowedTimeRanges?.[0]?.end ?? '')
     setPreferredChunk(target.preferredChunk ?? 0)
+    setRelatedFixedId(target.relatedFixed?.fixedEventId ?? '')
+    setRelatedCondition(target.relatedFixed?.condition ?? 'completeBeforeStart')
   }, [target])
 
   // 分割可能なら最短作業時間が条件付き必須（§5.1）。
@@ -443,6 +458,8 @@ function FlexibleTaskForm({ editing, onDone }: EditFormProps) {
     setRangeStart('')
     setRangeEnd('')
     setPreferredChunk(0)
+    setRelatedFixedId('')
+    setRelatedCondition('completeBeforeStart')
   }
 
   function toggleAllowedWeekday(day: Weekday) {
@@ -476,6 +493,9 @@ function FlexibleTaskForm({ editing, onDone }: EditFormProps) {
       allowedWeekdays: allowedWeekdays.length > 0 ? allowedWeekdays : undefined,
       allowedTimeRanges: hasRange ? [{ start: rangeStart, end: rangeEnd }] : undefined,
       preferredChunk: splittable && preferredChunk > 0 ? preferredChunk : undefined,
+      relatedFixed: relatedFixedId
+        ? { fixedEventId: relatedFixedId, condition: relatedCondition }
+        : undefined,
     }
     await saveDefinition(task)
     reset()
@@ -630,6 +650,36 @@ function FlexibleTaskForm({ editing, onDone }: EditFormProps) {
                 <option value="loose">目安</option>
               </select>
             </div>
+          </div>
+        )}
+        {!minimalMode && fixedEvents.length > 0 && (
+          <div>
+            <label className={labelClass}>関連する固定予定（任意）</label>
+            <select
+              className={inputClass}
+              value={relatedFixedId}
+              onChange={(e) => setRelatedFixedId(e.target.value)}
+            >
+              <option value="">（なし）</option>
+              {fixedEvents.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.name}（{f.date}）
+                </option>
+              ))}
+            </select>
+            {relatedFixedId && (
+              <select
+                className={`${inputClass} mt-1`}
+                value={relatedCondition}
+                onChange={(e) => setRelatedCondition(e.target.value as RelatedFixedCondition)}
+              >
+                {RELATED_CONDITIONS.map((c) => (
+                  <option key={c.value} value={c.value}>
+                    {c.label}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
         )}
         <div>

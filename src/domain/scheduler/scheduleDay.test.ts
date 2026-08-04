@@ -151,6 +151,47 @@ describe('scheduleDay', () => {
     expect(result.unplaced.map((u) => u.task.id)).toContain('t')
   })
 
+  it('関連固定予定「開始前に実行」で固定の前にだけ配置する（§5.4）', () => {
+    // 固定 13:00-14:00、タスクは開始前(doBeforeStart)条件 → 13:00 より前に配置。
+    const result = scheduleDay({
+      date: DATE,
+      categories: noCategories,
+      window: { start: 480, end: 1080 }, // 8:00-18:00
+      definitions: [
+        fixed({ id: 'meeting', start: '13:00', end: '14:00' }),
+        flex({
+          id: 't',
+          estimatedDuration: 60,
+          splittable: false,
+          relatedFixed: { fixedEventId: 'meeting', condition: 'doBeforeStart' },
+        }),
+      ],
+    })
+    const task = result.timeline.find((i) => i.sourceId === 't')
+    expect(task).toBeDefined()
+    expect(task!.interval.end).toBeLessThanOrEqual(780) // 13:00 まで
+  })
+
+  it('関連固定予定「終了後に実行」で固定の後にだけ配置する（§5.4）', () => {
+    const result = scheduleDay({
+      date: DATE,
+      categories: noCategories,
+      window: { start: 480, end: 1080 },
+      definitions: [
+        fixed({ id: 'meeting', start: '09:00', end: '10:00' }),
+        flex({
+          id: 't',
+          estimatedDuration: 60,
+          splittable: false,
+          relatedFixed: { fixedEventId: 'meeting', condition: 'doAfterEnd' },
+        }),
+      ],
+    })
+    const task = result.timeline.find((i) => i.sourceId === 't')
+    expect(task).toBeDefined()
+    expect(task!.interval.start).toBeGreaterThanOrEqual(600) // 10:00 以降
+  })
+
   it('兼用可(shareable)の付随時間は占有に含めない（§4.4）', () => {
     const result = scheduleDay({
       date: DATE,

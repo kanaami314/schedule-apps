@@ -78,6 +78,11 @@ export interface PlaceOptions {
   busy: readonly Interval[]
   /** 配置順に整列済みの柔軟なタスク（`orderFlexibleTasks` の結果）。 */
   tasks: readonly FlexibleTask[]
+  /**
+   * 関連固定予定の条件（§5.4）による、タスクごとの追加配置ウィンドウ制約。
+   * `task.id → 配置を許可する区間`。指定タスクはこの区間内にのみ配置する。
+   */
+  constraints?: ReadonlyMap<Id, Interval>
 }
 
 /** 分割不可タスクを1つの連続空きに配置する。 */
@@ -133,6 +138,11 @@ export function placeFlexibleTasks(options: PlaceOptions): PlacementResult {
         end: timeToMinutes(r.end),
       }))
       gaps = intersectIntervals(gaps, allowed)
+    }
+    // 関連固定予定の条件（§5.4）による配置ウィンドウ制約を重ねる。
+    const constraint = options.constraints?.get(task.id)
+    if (constraint) {
+      gaps = intersectIntervals(gaps, [constraint])
     }
     const result = task.splittable
       ? placeSplittable(task, gaps)
