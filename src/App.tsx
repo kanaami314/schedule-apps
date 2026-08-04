@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useAppStore } from './store/appStore'
 import { ScheduleManager } from './features/schedule/ScheduleManager'
 import { DaySchedule } from './features/schedule/DaySchedule'
@@ -27,6 +27,30 @@ function loadTab(): TabKey {
     // ignore
   }
   return 'home'
+}
+
+/** 予定の作成・変更・削除で再スケジューリングされたことを知らせるトースト（§16.5）。 */
+function ScheduleToast() {
+  const version = useAppStore((s) => s.scheduleVersion)
+  const [show, setShow] = useState(false)
+  const first = useRef(true)
+
+  useEffect(() => {
+    if (first.current) {
+      first.current = false
+      return
+    }
+    setShow(true)
+    const t = setTimeout(() => setShow(false), 2500)
+    return () => clearTimeout(t)
+  }, [version])
+
+  if (!show) return null
+  return (
+    <div className="fixed bottom-4 right-4 z-50 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-lg">
+      スケジュールを更新しました
+    </div>
+  )
 }
 
 /** セクション見出し付きのラッパ。 */
@@ -71,6 +95,7 @@ function App() {
 
   return (
     <div className="mx-auto max-w-4xl p-6">
+      <ScheduleToast />
       <header className="mb-4 flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">タイムスケジューラ</h1>

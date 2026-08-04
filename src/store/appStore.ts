@@ -66,6 +66,26 @@ function loadNotifyReflectionTime(): string {
   }
 }
 
+/**
+ * 予定変更が再スケジューリング対象か（§17.2）。
+ * 予定名・メモ・オンライン情報・通知設定・タグ・プロジェクトだけの変更は再計算しない。
+ * それ以外（時刻・負荷・カテゴリ・繰り返し等）の変更は再計算対象。
+ */
+function affectsSchedule(
+  prev: ScheduleDefinition | undefined,
+  next: ScheduleDefinition,
+): boolean {
+  if (!prev) return true // 新規作成は常に再計算。
+  const relevant = (d: ScheduleDefinition): string => {
+    const clone = { ...d } as Record<string, unknown>
+    for (const k of ['name', 'notes', 'onlineInfo', 'notification', 'tagIds', 'projectId', 'updatedAt']) {
+      delete clone[k]
+    }
+    return JSON.stringify(clone)
+  }
+  return relevant(prev) !== relevant(next)
+}
+
 /** 初期カテゴリ（§8.1）と既定色。最上位カテゴリとして投入する。 */
 const DEFAULT_CATEGORY_SEEDS: { name: string; color: string }[] = [
   { name: '学校', color: '#3b82f6' },
@@ -114,6 +134,8 @@ interface AppState {
   notifyBeforeMinutes: number
   /** 日次振り返り通知の時刻（§16.8、`HH:mm`、既定22:00）。 */
   notifyReflectionTime: string
+  /** 再スケジューリングが起きるたびに増える版番号（§16.5 の配置完了通知トリガ）。 */
+  scheduleVersion: number
 
   /** 永続化層から全データを読み込む（初回は初期カテゴリを投入）。 */
   init(): Promise<void>
@@ -169,6 +191,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   notifyEnabled: loadNotifyEnabled(),
   notifyBeforeMinutes: loadNotifyBefore(),
   notifyReflectionTime: loadNotifyReflectionTime(),
+  scheduleVersion: 0,
 
   setMinimalMode(value) {
     try {
@@ -246,13 +269,20 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   async saveDefinition(def) {
     await repository.definitions.put(def)
+    const prev = get().definitions.find((d) => d.id === def.id)
     const rest = get().definitions.filter((d) => d.id !== def.id)
-    set({ definitions: [...rest, def] })
+    // §17.2: 名前・メモ等だけの変更では再計算通知を出さない。
+    const bump = affectsSchedule(prev, def) ? 1 : 0
+    set({ definitions: [...rest, def], scheduleVersion: get().scheduleVersion + bump })
   },
 
   async removeDefinition(id) {
     await repository.definitions.delete(id)
-    set({ definitions: get().definitions.filter((d) => d.id !== id) })
+    // 削除は空き時間が変わるため常に再計算対象（§17.1）。
+    set({
+      definitions: get().definitions.filter((d) => d.id !== id),
+      scheduleVersion: get().scheduleVersion + 1,
+    })
   },
 
   async saveCategory(category) {
