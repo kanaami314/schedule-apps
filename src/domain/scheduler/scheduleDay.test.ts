@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { Category, FixedEvent, FlexibleTask, LifeRoutine } from '../types'
+import type { Category, FixedEvent, FlexibleTask, FreeActivity, LifeRoutine } from '../types'
 import { scheduleDay } from './scheduleDay'
 
 const DATE = '2026-08-05'
@@ -26,6 +26,16 @@ function flex(
     updatedAt: '2026-08-01T00:00',
     name: o.id,
     deadline: '2026-08-06T09:00',
+    ...o,
+  }
+}
+
+function free(o: Partial<FreeActivity> & { id: string; duration: number }): FreeActivity {
+  return {
+    kind: 'free',
+    createdAt: '2026-08-01T00:00',
+    updatedAt: '2026-08-01T00:00',
+    name: o.id,
     ...o,
   }
 }
@@ -190,6 +200,40 @@ describe('scheduleDay', () => {
     const task = result.timeline.find((i) => i.sourceId === 't')
     expect(task).toBeDefined()
     expect(task!.interval.start).toBeGreaterThanOrEqual(600) // 10:00 以降
+  })
+
+  it('自由活動を残りの空きへ配置する（§3 の4番目）', () => {
+    // 固定 9:00-10:00 の後、残り空きへ自由活動60分を配置。
+    const result = scheduleDay({
+      date: DATE,
+      categories: noCategories,
+      window: { start: 540, end: 720 }, // 9:00-12:00
+      definitions: [fixed({ id: 'f', start: '09:00', end: '10:00' }), free({ id: 'game', duration: 60 })],
+    })
+    const g = result.timeline.find((i) => i.sourceId === 'game')
+    expect(g?.kind).toBe('free')
+    expect(g?.interval).toEqual({ start: 600, end: 660 }) // 10:00-11:00
+  })
+
+  it('自動配置オフの自由活動は配置しない（会話ログ）', () => {
+    const result = scheduleDay({
+      date: DATE,
+      categories: noCategories,
+      window: { start: 540, end: 720 },
+      definitions: [free({ id: 'game', duration: 60, autoPlace: false })],
+    })
+    expect(result.timeline.find((i) => i.sourceId === 'game')).toBeUndefined()
+  })
+
+  it('実行可能曜日でない自由活動は配置しない（§5.2 相当）', () => {
+    // DATE=2026-08-05 は水曜(3)。月火のみ許可 → 配置しない。
+    const result = scheduleDay({
+      date: DATE,
+      categories: noCategories,
+      window: { start: 540, end: 720 },
+      definitions: [free({ id: 'game', duration: 60, allowedWeekdays: [1, 2] })],
+    })
+    expect(result.timeline.find((i) => i.sourceId === 'game')).toBeUndefined()
   })
 
   it('兼用可(shareable)の付随時間は占有に含めない（§4.4）', () => {

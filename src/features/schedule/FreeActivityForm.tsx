@@ -1,7 +1,9 @@
 /**
- * 自由活動の作成・編集フォーム（§6）。
- * 活動名・活動時間・カテゴリ・場所と、回復効果/消耗効果および各効果の強度を登録する。
- * 負荷への反映ロジックは `domain/load/freeActivity.ts`（実装済）が担う。
+ * 自由活動の作成・編集フォーム（§6 ＋ 設計会話の8項目, 2026-08-04 確定）。
+ * 活動名・カテゴリ・最短/希望実行時間・希望頻度・実行可能曜日/時間帯・分割可能か・
+ * 自動配置するか、および回復/消耗効果（負荷計算 C-5 用）を登録する。
+ * 負荷への反映は `domain/load/freeActivity.ts` が担う。自動配置は scheduleDay（§3 の4番目）。
+ * 希望頻度（週N回）の厳密遵守は複数日対応で完成し、現状は値として保持する。
  * `editing` に自由活動が渡されたら編集モード（id・createdAt を維持して更新）。
  */
 
@@ -14,10 +16,13 @@ import type {
   RecoveryEffect,
   RecoveryEffectSetting,
   ScheduleDefinition,
+  Weekday,
 } from '../../domain/types'
 import { useAppStore } from '../../store/appStore'
 import { newId, nowLocalIso } from '../../lib/ids'
 import { CategorySelect } from './CategorySelect'
+
+const WEEKDAY_LABELS = ['日', '月', '火', '水', '木', '金', '土'] as const
 
 const inputClass =
   'w-full rounded border border-gray-300 px-2 py-1 text-sm dark:border-gray-600 dark:bg-gray-800'
@@ -112,6 +117,14 @@ export function FreeActivityForm({ editing, onDone }: FreeActivityFormProps) {
   const target = editing?.kind === 'free' ? editing : null
   const [name, setName] = useState('')
   const [duration, setDuration] = useState(60)
+  const [minDuration, setMinDuration] = useState(30)
+  const [splittable, setSplittable] = useState(false)
+  const [freqCount, setFreqCount] = useState(0)
+  const [freqUnit, setFreqUnit] = useState<'week' | 'month'>('week')
+  const [allowedWeekdays, setAllowedWeekdays] = useState<Weekday[]>([])
+  const [rangeStart, setRangeStart] = useState('')
+  const [rangeEnd, setRangeEnd] = useState('')
+  const [autoPlace, setAutoPlace] = useState(true)
   const [categoryId, setCategoryId] = useState('')
   const [place, setPlace] = useState('')
   const [recovery, setRecovery] = useState(() => initEffects(RECOVERY_EFFECTS))
@@ -122,6 +135,14 @@ export function FreeActivityForm({ editing, onDone }: FreeActivityFormProps) {
     if (!target) return
     setName(target.name)
     setDuration(target.duration)
+    setMinDuration(target.minDuration ?? 30)
+    setSplittable(target.splittable ?? false)
+    setFreqCount(target.frequency?.count ?? 0)
+    setFreqUnit(target.frequency?.unit ?? 'week')
+    setAllowedWeekdays(target.allowedWeekdays ? [...target.allowedWeekdays] : [])
+    setRangeStart(target.allowedTimeRanges?.[0]?.start ?? '')
+    setRangeEnd(target.allowedTimeRanges?.[0]?.end ?? '')
+    setAutoPlace(target.autoPlace ?? true)
     setCategoryId(target.categoryId ?? '')
     setPlace(target.place ?? '')
     setRecovery(effectsFromSettings(RECOVERY_EFFECTS, target.recoveryEffects))
@@ -133,10 +154,24 @@ export function FreeActivityForm({ editing, onDone }: FreeActivityFormProps) {
   function reset() {
     setName('')
     setDuration(60)
+    setMinDuration(30)
+    setSplittable(false)
+    setFreqCount(0)
+    setFreqUnit('week')
+    setAllowedWeekdays([])
+    setRangeStart('')
+    setRangeEnd('')
+    setAutoPlace(true)
     setCategoryId('')
     setPlace('')
     setRecovery(initEffects(RECOVERY_EFFECTS))
     setDrain(initEffects(DRAIN_EFFECTS))
+  }
+
+  function toggleWeekday(day: Weekday) {
+    setAllowedWeekdays((prev) =>
+      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day].sort((a, b) => a - b),
+    )
   }
 
   async function submit() {
@@ -148,6 +183,7 @@ export function FreeActivityForm({ editing, onDone }: FreeActivityFormProps) {
       effect: e,
       intensity: drain[e].intensity,
     }))
+    const hasRange = rangeStart !== '' && rangeEnd !== '' && rangeStart < rangeEnd
     const activity: FreeActivity = {
       ...(target ?? {}),
       id: target?.id ?? newId(),
@@ -156,6 +192,12 @@ export function FreeActivityForm({ editing, onDone }: FreeActivityFormProps) {
       updatedAt: now,
       name: name.trim(),
       duration,
+      minDuration: minDuration > 0 ? minDuration : undefined,
+      splittable,
+      frequency: freqCount > 0 ? { count: freqCount, unit: freqUnit } : undefined,
+      allowedWeekdays: allowedWeekdays.length > 0 ? allowedWeekdays : undefined,
+      allowedTimeRanges: hasRange ? [{ start: rangeStart, end: rangeEnd }] : undefined,
+      autoPlace,
       categoryId: categoryId || undefined,
       place: place.trim() || undefined,
       recoveryEffects: recoveryEffects.length > 0 ? recoveryEffects : undefined,
@@ -181,7 +223,17 @@ export function FreeActivityForm({ editing, onDone }: FreeActivityFormProps) {
         </div>
         <div className="flex gap-2">
           <div className="flex-1">
-            <label className={labelClass}>活動時間（分）</label>
+            <label className={labelClass}>最短実行時間（分）</label>
+            <input
+              type="number"
+              min={1}
+              className={inputClass}
+              value={minDuration}
+              onChange={(e) => setMinDuration(Number(e.target.value))}
+            />
+          </div>
+          <div className="flex-1">
+            <label className={labelClass}>希望実行時間（分）</label>
             <input
               type="number"
               min={1}
@@ -190,12 +242,86 @@ export function FreeActivityForm({ editing, onDone }: FreeActivityFormProps) {
               onChange={(e) => setDuration(Number(e.target.value))}
             />
           </div>
+        </div>
+        <CategorySelect value={categoryId} onChange={setCategoryId} />
+        <div className="flex gap-2">
           <div className="flex-1">
             <label className={labelClass}>場所（任意）</label>
             <input className={inputClass} value={place} onChange={(e) => setPlace(e.target.value)} />
           </div>
+          <div>
+            <label className={labelClass}>希望頻度</label>
+            <div className="flex items-center gap-1">
+              <input
+                type="number"
+                min={0}
+                className="w-14 rounded border border-gray-300 px-2 py-1 text-sm dark:border-gray-600 dark:bg-gray-800"
+                value={freqCount}
+                onChange={(e) => setFreqCount(Number(e.target.value))}
+              />
+              <span className="text-xs text-gray-400">回 /</span>
+              <select
+                className="rounded border border-gray-300 px-1 py-1 text-sm dark:border-gray-600 dark:bg-gray-800"
+                value={freqUnit}
+                onChange={(e) => setFreqUnit(e.target.value as 'week' | 'month')}
+              >
+                <option value="week">週</option>
+                <option value="month">月</option>
+              </select>
+            </div>
+          </div>
         </div>
-        <CategorySelect value={categoryId} onChange={setCategoryId} />
+        <div>
+          <label className={labelClass}>実行可能な曜日（任意・未指定なら毎日）</label>
+          <div className="flex gap-1">
+            {WEEKDAY_LABELS.map((label, i) => {
+              const day = i as Weekday
+              const on = allowedWeekdays.includes(day)
+              return (
+                <button
+                  key={day}
+                  type="button"
+                  onClick={() => toggleWeekday(day)}
+                  className={`h-7 w-7 rounded text-xs font-medium ${
+                    on
+                      ? 'bg-blue-600 text-white'
+                      : 'border border-gray-300 text-gray-600 dark:border-gray-600 dark:text-gray-300'
+                  }`}
+                >
+                  {label}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+        <div className="flex items-end gap-3">
+          <div>
+            <label className={labelClass}>実行可能な時間帯（任意）</label>
+            <div className="flex items-center gap-1">
+              <input
+                type="time"
+                className="rounded border border-gray-300 px-2 py-1 text-sm dark:border-gray-600 dark:bg-gray-800"
+                value={rangeStart}
+                onChange={(e) => setRangeStart(e.target.value)}
+              />
+              <span className="text-xs text-gray-400">〜</span>
+              <input
+                type="time"
+                className="rounded border border-gray-300 px-2 py-1 text-sm dark:border-gray-600 dark:bg-gray-800"
+                value={rangeEnd}
+                onChange={(e) => setRangeEnd(e.target.value)}
+              />
+            </div>
+          </div>
+          <label className="flex items-center gap-2 pb-1 text-sm">
+            <input type="checkbox" checked={splittable} onChange={(e) => setSplittable(e.target.checked)} />
+            分割可能
+          </label>
+          <label className="flex items-center gap-2 pb-1 text-sm">
+            <input type="checkbox" checked={autoPlace} onChange={(e) => setAutoPlace(e.target.checked)} />
+            自動配置する
+          </label>
+        </div>
 
         <div>
           <p className={`${labelClass} mb-1`}>回復効果</p>

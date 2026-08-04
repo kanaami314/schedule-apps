@@ -14,13 +14,20 @@
  */
 
 import type { Category, Id, IsoDate, IsoDateTime, Minutes, ResolvedLoad, Weekday } from '../types'
-import type { AncillaryTime, FixedEvent, LifeRoutine, RoutineType, ScheduleDefinition } from '../types'
+import type {
+  AncillaryTime,
+  FixedEvent,
+  FreeActivity,
+  LifeRoutine,
+  RoutineType,
+  ScheduleDefinition,
+} from '../types'
 import { resolveLoad } from '../load/inheritance'
 import type { LoadSegment } from '../load/continuous'
 import type { RecoveryIntervalType } from '../load/recovery'
 import { insertBreaks, type TimelineEntry } from './breakInsertion'
 import { duration, freeGaps, timeToMinutes, type Interval } from './intervals'
-import { placeFlexibleTasks, type PlacedItem, type Unplaced } from './placement'
+import { intersectIntervals, placeFlexibleTasks, type PlacedItem, type Unplaced } from './placement'
 import { orderFlexibleTasks } from './taskOrder'
 import { occursOn } from './repeat'
 
@@ -189,6 +196,47 @@ export function scheduleDay(options: ScheduleDayOptions): ScheduleDayResult {
     }
   }
 
+  // 4.5 自由活動を配置（§3 の4番目, 会話ログの設計）。自動配置オンかつ実行可能曜日に該当する
+  //     ものを、固定・ルーチン・柔軟タスクを除いた残りの空きへ配置する。実行可能時間帯を尊重し、
+  //     希望実行時間ぶん（入らなければ最短実行時間まで短縮して）1ブロック置く。
+  //     ※ 希望頻度（週N回）の厳密遵守は複数日対応で完成（現状は値を保持するのみ）。
+  const freeActivities = options.definitions.filter(
+    (d): d is FreeActivity =>
+      d.kind === 'free' &&
+      (d.autoPlace ?? true) &&
+      (!d.allowedWeekdays || d.allowedWeekdays.includes(weekday)),
+  )
+  const freeById = new Map(freeActivities.map((f) => [f.id, f]))
+  const freeOccupied: Interval[] = [...busy, ...flexiblePlacements.map((p) => p.interval)]
+  const freePlacements: PlacedItem[] = []
+  for (const fa of freeActivities) {
+    let gaps = freeGaps(window, freeOccupied)
+    if (fa.allowedTimeRanges && fa.allowedTimeRanges.length > 0) {
+      const allowed = fa.allowedTimeRanges.map((r) => ({
+        start: timeToMinutes(r.start),
+        end: timeToMinutes(r.end),
+      }))
+      gaps = intersectIntervals(gaps, allowed)
+    }
+    const want = fa.duration
+    const min = fa.minDuration ?? want
+    // 希望実行時間が入る空きを優先。無ければ最短実行時間が入る空きへ、入る分だけ置く。
+    const gap = gaps.find((g) => duration(g) >= want) ?? gaps.find((g) => duration(g) >= min)
+    if (!gap) continue // 空きが無ければ配置しない（余暇なので未配置警告は出さない）。
+    const place = Math.min(want, duration(gap))
+    const interval: Interval = { start: gap.start, end: gap.start + place }
+    freePlacements.push({
+      id: fa.id,
+      sourceId: fa.id,
+      kind: 'free',
+      interval,
+      movable: true,
+      categoryId: fa.categoryId,
+      label: fa.name,
+    })
+    freeOccupied.push(interval)
+  }
+
   // 5. 負荷を持つ予定・回復区間・占有ブロックから休憩を挿入する（§12 / §3 / C-4）。
   //    固定予定・生活ルーチンは「壁」（不動）、柔軟タスクは休憩確保のため後ろへ動かせる（I-1）。
   const routineTypeById = new Map(routines.map((r) => [r.id, r.routineType]))
@@ -213,22 +261,41 @@ export function scheduleDay(options: ScheduleDayOptions): ScheduleDayResult {
       : { type: 'neutral', minutes }
     return { interval: p.interval, segment, movable: false, id: p.id }
   })
+  // 自由活動は効果で負荷を増減する 'free' 区間。休憩確保では最初に動かす対象（movable）。
+  const freeEntries: TimelineEntry[] = freePlacements.map((p) => {
+    const fa = p.sourceId ? freeById.get(p.sourceId) : undefined
+    return {
+      interval: p.interval,
+      segment: {
+        type: 'free',
+        minutes: p.interval.end - p.interval.start,
+        recoveryEffects: fa?.recoveryEffects,
+        drainEffects: fa?.drainEffects,
+      },
+      movable: true,
+      id: p.id,
+    }
+  })
 
   const { breaks, moved } = insertBreaks(
-    [...fixedEntries, ...flexibleEntries, ...routineEntries],
+    [...fixedEntries, ...flexibleEntries, ...routineEntries, ...freeEntries],
     window,
   )
 
-  // 休憩確保のために後ろへ動いた柔軟タスクの配置を反映する。
+  // 休憩確保のために後ろへ動いた柔軟タスク・自由活動の配置を反映する。
   if (moved.size > 0) {
-    for (const placement of flexiblePlacements) {
+    for (const placement of [...flexiblePlacements, ...freePlacements]) {
       const next = moved.get(placement.id)
       if (next) placement.interval = next
     }
   }
 
-  const timeline = [...fixedPlacements, ...routinePlacements, ...flexiblePlacements, ...breaks].sort(
-    (a, b) => a.interval.start - b.interval.start,
-  )
+  const timeline = [
+    ...fixedPlacements,
+    ...routinePlacements,
+    ...flexiblePlacements,
+    ...freePlacements,
+    ...breaks,
+  ].sort((a, b) => a.interval.start - b.interval.start)
   return { timeline, unplaced }
 }

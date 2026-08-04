@@ -230,13 +230,39 @@ export interface DrainEffectSetting {
  * 自由活動（§6）。ゲーム・ピアノ・ドライブなど。休憩とは区別する。
  * 回復効果・消耗効果とその強度から、累積負荷を増減させる（§6.3〜§6.7 / C-5）。
  */
+/**
+ * 自由活動の希望頻度（会話ログの設計: 週4回など）。
+ * 現状の単日スケジューラでは上限の厳密遵守はせず、値として保持する（複数日対応で完成）。
+ */
+export interface FrequencyWish {
+  count: number
+  unit: 'week' | 'month'
+}
+
 export interface FreeActivity extends ScheduleBase {
   kind: 'free'
   name: string
-  /** 活動時間（§6）。 */
+  /** 希望実行時間（§6 / 会話ログ）。1回の希望の長さ。 */
   duration: Minutes
   categoryId?: Id
   place?: string
+  /**
+   * 自由活動の登録項目は、要件仕様書 §6 に加えて設計会話で確定した8項目に沿う
+   * （2026-08-04, ユーザー確認: 活動名/カテゴリ/最短実行時間/希望実行時間/希望頻度/
+   * 実行可能曜日・時間帯/分割可能か/自動配置するか）。§6 の効果は負荷計算(C-5)に使う。
+   */
+  /** 最短実行時間（分, 会話ログ）。分割時の1回の下限。 */
+  minDuration?: Minutes
+  /** 分割可能か（会話ログ）。未設定は false 扱い。 */
+  splittable?: boolean
+  /** 希望頻度（週4回など, 会話ログ）。値として保持（厳密遵守は複数日対応後）。 */
+  frequency?: FrequencyWish
+  /** 実行可能な曜日（§5.2 相当, 未設定なら毎日可）。 */
+  allowedWeekdays?: Weekday[]
+  /** 実行可能な時間帯（§5.2 相当）。 */
+  allowedTimeRanges?: TimeRange[]
+  /** 自動で予定に入れるか（会話ログ, 既定オン）。false なら候補として保持し自動配置しない。 */
+  autoPlace?: boolean
   /** 回復効果とその強度（§6.1, §6.2）。 */
   recoveryEffects?: RecoveryEffectSetting[]
   /** 消耗効果とその強度（§6.1, §6.2）。 */

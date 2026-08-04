@@ -20,7 +20,7 @@ import {
 } from './intervals'
 
 /** 空き区間の集合を、許可区間の集合と交差させる（§5.2 実行可能時間帯）。 */
-function intersectIntervals(gaps: readonly Interval[], allowed: readonly Interval[]): Interval[] {
+export function intersectIntervals(gaps: readonly Interval[], allowed: readonly Interval[]): Interval[] {
   const out: Interval[] = []
   for (const g of gaps) {
     for (const a of allowed) {
