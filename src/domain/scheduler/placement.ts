@@ -83,6 +83,11 @@ export interface PlaceOptions {
    * `task.id → 配置を許可する区間`。指定タスクはこの区間内にのみ配置する。
    */
   constraints?: ReadonlyMap<Id, Interval>
+  /**
+   * 分割可能タスクを全量配置できない場合でも、置ける分だけ配置する（複数日配分用）。
+   * 既定 false（単日は §16.6 どおり全量入らなければ未配置）。
+   */
+  partial?: boolean
 }
 
 /** 分割不可タスクを1つの連続空きに配置する。 */
@@ -94,7 +99,11 @@ function placeNonSplittable(task: FlexibleTask, gaps: Interval[]): Interval[] | 
 }
 
 /** 分割可能タスクを複数の空きへ分割配置する。各セッションは最短作業時間以上。 */
-function placeSplittable(task: FlexibleTask, gaps: Interval[]): Interval[] | UnplacedReason {
+function placeSplittable(
+  task: FlexibleTask,
+  gaps: Interval[],
+  partial: boolean,
+): Interval[] | UnplacedReason {
   const minChunk = task.minChunk ?? task.estimatedDuration
   const preferred = task.preferredChunk // 未設定なら空きに合わせて詰める
   let remaining = task.estimatedDuration
@@ -114,6 +123,8 @@ function placeSplittable(task: FlexibleTask, gaps: Interval[]): Interval[] | Unp
   }
 
   if (remaining > 0) {
+    // 複数日配分では置ける分だけ確定し、残りは翌日以降へ持ち越す。
+    if (partial && sessions.length > 0) return mergeIntervals(sessions)
     return totalDuration(gaps) < task.estimatedDuration ? 'insufficientFreeTime' : 'minChunkNotMet'
   }
   // 同一空き内で隣接したセッションは1区間に結合して返す。
@@ -145,7 +156,7 @@ export function placeFlexibleTasks(options: PlaceOptions): PlacementResult {
       gaps = intersectIntervals(gaps, [constraint])
     }
     const result = task.splittable
-      ? placeSplittable(task, gaps)
+      ? placeSplittable(task, gaps, options.partial ?? false)
       : placeNonSplittable(task, gaps)
 
     if (typeof result === 'string') {

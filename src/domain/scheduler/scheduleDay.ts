@@ -51,6 +51,14 @@ export interface ScheduleDayOptions {
   referenceTime?: IsoDateTime
   /** 〆切間近しきい値（分）。 */
   deadlineNearMinutes?: Minutes
+  /**
+   * 柔軟タスクごとの、この日に配置してよい残り時間（分）。複数日配分（scheduleRange）で使う。
+   * 指定タスクは推定所要時間ではなくこの残量を上限に配置し、残量 0 以下なら配置しない。
+   * 未指定のタスクは従来どおり推定所要時間で配置する。
+   */
+  remainingByTask?: ReadonlyMap<Id, Minutes>
+  /** 分割可能タスクを置ける分だけ配置する（複数日配分用, 既定 false）。 */
+  allowPartialSplit?: boolean
 }
 
 export interface ScheduleDayResult {
@@ -147,12 +155,21 @@ export function scheduleDay(options: ScheduleDayOptions): ScheduleDayResult {
 
   // 3. 柔軟なタスクを整列して残りの空きへ貪欲配置。
   //    開始可能日・実行可能曜日(§5.2)を満たすタスクのみ、この日の配置対象にする。
-  const flexibleTasks = options.definitions.filter(
-    (d): d is Extract<ScheduleDefinition, { kind: 'flexible' }> =>
-      d.kind === 'flexible' &&
-      (!d.startableFrom || d.startableFrom <= options.date) &&
-      (!d.allowedWeekdays || d.allowedWeekdays.includes(weekday)),
-  )
+  //    複数日配分では、この日に配置してよい残量(remainingByTask)を上限にする。
+  const flexibleTasks = options.definitions
+    .filter(
+      (d): d is Extract<ScheduleDefinition, { kind: 'flexible' }> =>
+        d.kind === 'flexible' &&
+        (!d.startableFrom || d.startableFrom <= options.date) &&
+        (!d.allowedWeekdays || d.allowedWeekdays.includes(weekday)),
+    )
+    .map((t) => {
+      const remaining = options.remainingByTask?.get(t.id)
+      return remaining === undefined
+        ? t
+        : { ...t, estimatedDuration: Math.min(t.estimatedDuration, remaining) }
+    })
+    .filter((t) => t.estimatedDuration > 0)
   const ordered = orderFlexibleTasks(flexibleTasks, {
     referenceTime,
     deadlineNearMinutes: options.deadlineNearMinutes,
@@ -184,6 +201,7 @@ export function scheduleDay(options: ScheduleDayOptions): ScheduleDayResult {
     busy,
     tasks: ordered,
     constraints,
+    partial: options.allowPartialSplit,
   })
 
   // 4. 柔軟タスクの配置に負荷とカテゴリを付与。

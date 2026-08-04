@@ -9,7 +9,7 @@ import { useMemo, useState } from 'react'
 import type { Category, Id, ScheduleDefinition } from '../../domain/types'
 import { categoryChain } from '../../domain/load/inheritance'
 import { minutesToTime } from '../../domain/scheduler/intervals'
-import { scheduleDay } from '../../domain/scheduler/scheduleDay'
+import { scheduleRange } from '../../domain/scheduler/scheduleRange'
 import type { PlacedItem } from '../../domain/scheduler/placement'
 import { useAppStore } from '../../store/appStore'
 
@@ -71,17 +71,6 @@ export function CalendarView() {
     return def && 'projectId' in def ? def.projectId : undefined
   }
 
-  /** 対象日の配置予定（休憩を除く・カテゴリ/プロジェクト絞り込み適用）。 */
-  const itemsOf = (date: string): PlacedItem[] => {
-    const { timeline } = scheduleDay({ date, definitions, categories: categoryMap })
-    return timeline.filter(
-      (i) =>
-        i.kind !== 'break' &&
-        (categoryFilter === '' || topOf(i.categoryId) === categoryFilter) &&
-        (projectFilter === '' || projectOf(i) === projectFilter),
-    )
-  }
-
   const today = toIso(new Date())
 
   const weekDates = useMemo(() => {
@@ -95,6 +84,23 @@ export function CalendarView() {
     // 6週間ぶん（42日）で月をカバー。
     return Array.from({ length: 42 }, (_, i) => addDays(gridStart, i))
   }, [anchor])
+
+  // 表示範囲の全日を複数日配分でまとめて組む（柔軟タスクが日をまたいで分散される）。
+  const rangeResults = useMemo(() => {
+    const dates = (view === 'week' ? weekDates : monthGrid).map(toIso)
+    return scheduleRange({ dates, definitions, categories: categoryMap })
+  }, [view, weekDates, monthGrid, definitions, categoryMap])
+
+  /** 対象日の配置予定（休憩を除く・カテゴリ/プロジェクト絞り込み適用）。 */
+  const itemsOf = (date: string): PlacedItem[] => {
+    const timeline = rangeResults.get(date)?.timeline ?? []
+    return timeline.filter(
+      (i) =>
+        i.kind !== 'break' &&
+        (categoryFilter === '' || topOf(i.categoryId) === categoryFilter) &&
+        (projectFilter === '' || projectOf(i) === projectFilter),
+    )
+  }
 
   function shift(dir: -1 | 1) {
     setAnchor((prev) =>
