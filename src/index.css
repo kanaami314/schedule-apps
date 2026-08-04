@@ -1,11 +1,54 @@
 @import "tailwindcss";
 
+/*
+ * ダークモードは OS 設定に追従させず、常にライト（パステル）表示にする。
+ * dark: バリアントを class ベースに変更し、.dark を付与しないことで無効化する。
+ */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * パステル基調のアクセント色。既存コンポーネントは blue/emerald 等のユーティリティを
+ * 直接使っているため、デザイントークンを上書きして全体をやわらかい色味に振る。
+ * 白文字ボタンが読める範囲でくすませたパステルにする。
+ */
+@theme {
+  --color-blue-400: #9fb2e6;
+  --color-blue-500: #8598db;
+  --color-blue-600: #7183cf;
+  --color-blue-700: #6274c2;
+
+  --color-emerald-400: #86ccae;
+  --color-emerald-500: #6ec09c;
+  --color-emerald-600: #55ab83;
+  --color-emerald-700: #489a74;
+
+  --color-amber-500: #e6b45f;
+  --color-amber-600: #d5a24a;
+
+  --color-red-500: #dd9494;
+  --color-red-600: #cf7b7b;
+  --color-red-700: #c16a6a;
+
+  --color-orange-500: #eab27f;
+  --color-orange-600: #dd9d63;
+}
+
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
 }
 
 body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  /* やわらかなパステルのグラデーション背景（ラベンダー→ミント）。 */
+  background: linear-gradient(160deg, #f7f2fb 0%, #f3f7fb 45%, #eef8f4 100%);
+  background-attachment: fixed;
+  color: #45424f;
+}
+
+/* カードや枠を、パステル背景に映えるやわらかい白＋淡い影にする。 */
+.rounded-lg.border {
+  background-color: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 1px 3px rgba(120, 110, 140, 0.08);
 }
