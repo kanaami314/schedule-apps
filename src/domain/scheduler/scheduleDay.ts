@@ -57,8 +57,15 @@ export interface ScheduleDayOptions {
    * 未指定のタスクは従来どおり推定所要時間で配置する。
    */
   remainingByTask?: ReadonlyMap<Id, Minutes>
+  /**
+   * 柔軟タスクごとの、既に完了した実績時間（分, §14）。推定所要時間から差し引いて残量を求める。
+   * `remainingByTask` が指定されたタスクではそちらが優先される。
+   */
+  completedByTask?: ReadonlyMap<Id, Minutes>
   /** 分割可能タスクを置ける分だけ配置する（複数日配分用, 既定 false）。 */
   allowPartialSplit?: boolean
+  /** この日は配置しない自由活動の ID（希望頻度の上限に達した等）。 */
+  skipFreeIds?: ReadonlySet<Id>
 }
 
 export interface ScheduleDayResult {
@@ -161,13 +168,16 @@ export function scheduleDay(options: ScheduleDayOptions): ScheduleDayResult {
       (d): d is Extract<ScheduleDefinition, { kind: 'flexible' }> =>
         d.kind === 'flexible' &&
         (!d.startableFrom || d.startableFrom <= options.date) &&
-        (!d.allowedWeekdays || d.allowedWeekdays.includes(weekday)),
+        (!d.allowedWeekdays || d.allowedWeekdays.includes(weekday)) &&
+        // 期限日での打ち切り: 期限日が対象日より前（過ぎている）タスクは配置しない。
+        d.deadline.slice(0, 10) >= options.date,
     )
     .map((t) => {
-      const remaining = options.remainingByTask?.get(t.id)
-      return remaining === undefined
-        ? t
-        : { ...t, estimatedDuration: Math.min(t.estimatedDuration, remaining) }
+      // 残量: scheduleRange の持ち越し(remainingByTask)が優先。無ければ 推定所要 − 実績(completed)。
+      const carry = options.remainingByTask?.get(t.id)
+      const base =
+        carry !== undefined ? carry : t.estimatedDuration - (options.completedByTask?.get(t.id) ?? 0)
+      return { ...t, estimatedDuration: Math.min(t.estimatedDuration, base) }
     })
     .filter((t) => t.estimatedDuration > 0)
   const ordered = orderFlexibleTasks(flexibleTasks, {
@@ -222,7 +232,8 @@ export function scheduleDay(options: ScheduleDayOptions): ScheduleDayResult {
     (d): d is FreeActivity =>
       d.kind === 'free' &&
       (d.autoPlace ?? true) &&
-      (!d.allowedWeekdays || d.allowedWeekdays.includes(weekday)),
+      (!d.allowedWeekdays || d.allowedWeekdays.includes(weekday)) &&
+      !options.skipFreeIds?.has(d.id), // 希望頻度の上限に達した自由活動は当日スキップ。
   )
   const freeById = new Map(freeActivities.map((f) => [f.id, f]))
   const freeOccupied: Interval[] = [...busy, ...flexiblePlacements.map((p) => p.interval)]

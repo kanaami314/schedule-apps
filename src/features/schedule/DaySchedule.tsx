@@ -7,6 +7,7 @@ import { useMemo, useState, type CSSProperties } from 'react'
 import type { Category, Id, ResolvedLoad } from '../../domain/types'
 import { minutesToTime, type Interval } from '../../domain/scheduler/intervals'
 import { scheduleDay, FULL_DAY } from '../../domain/scheduler/scheduleDay'
+import { completedMinutesByTask } from '../../domain/analytics/progress'
 import type { PlacedItem, UnplacedReason } from '../../domain/scheduler/placement'
 import { classifyLoad, unitLoad, type LoadCategory } from '../../domain/load/score'
 import { categoryChain } from '../../domain/load/inheritance'
@@ -135,17 +136,19 @@ const DAY_WINDOW: Interval = FULL_DAY
 export function DaySchedule() {
   const definitions = useAppStore((s) => s.definitions)
   const categories = useAppStore((s) => s.categories)
+  const records = useAppStore((s) => s.records)
   const [date, setDate] = useState(todayIso())
 
   const categoryMap = useMemo(
     () => new Map<Id, Category>(categories.map((c) => [c.id, c])),
     [categories],
   )
+  const completedByTask = useMemo(() => completedMinutesByTask(records), [records])
 
   // 対象日を選ぶと自動で 1 日分を組み立てる（24時間表示）。
   const result = useMemo(
-    () => scheduleDay({ date, definitions, categories: categoryMap, window: DAY_WINDOW }),
-    [date, definitions, categoryMap],
+    () => scheduleDay({ date, definitions, categories: categoryMap, window: DAY_WINDOW, completedByTask }),
+    [date, definitions, categoryMap, completedByTask],
   )
 
   return (

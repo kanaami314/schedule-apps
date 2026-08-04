@@ -202,6 +202,31 @@ describe('scheduleDay', () => {
     expect(task!.interval.start).toBeGreaterThanOrEqual(600) // 10:00 以降
   })
 
+  it('期限日を過ぎたタスクは配置しない（期限打ち切り）', () => {
+    // DATE=2026-08-05。期限が前日のタスク → 配置しない。
+    const result = scheduleDay({
+      date: DATE,
+      categories: noCategories,
+      window: { start: 540, end: 720 },
+      definitions: [flex({ id: 't', estimatedDuration: 60, deadline: '2026-08-04T09:00' })],
+    })
+    expect(result.timeline.find((i) => i.sourceId === 't')).toBeUndefined()
+  })
+
+  it('実績(completedByTask)を差し引いた残量で配置する', () => {
+    // 推定120分、実績60分完了 → 残り60分だけ配置。
+    const result = scheduleDay({
+      date: DATE,
+      categories: noCategories,
+      window: { start: 540, end: 720 },
+      definitions: [flex({ id: 't', estimatedDuration: 120, splittable: false })],
+      completedByTask: new Map([['t', 60]]),
+    })
+    const task = result.timeline.find((i) => i.sourceId === 't')
+    expect(task).toBeDefined()
+    expect(task!.interval.end - task!.interval.start).toBe(60)
+  })
+
   it('自由活動を残りの空きへ配置する（§3 の4番目）', () => {
     // 固定 9:00-10:00 の後、残り空きへ自由活動60分を配置。
     const result = scheduleDay({

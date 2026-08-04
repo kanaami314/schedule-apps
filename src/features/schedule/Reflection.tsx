@@ -121,14 +121,18 @@ export function Reflection() {
   function declare(item: PlacedItem, status: 'completed' | 'incomplete') {
     const now = nowLocalIso()
     const existingRec = recordByItem.get(item.id)
+    // 完了申告で実開始/終了が無ければ予定の開始/終了時刻を用いる（§14.1/§14.2）。
+    // 実時間が揃うことで、複数日の残量算出（実績差し引き）にも反映される。
+    const actualStart =
+      existingRec?.actualStart ??
+      (status === 'completed' ? `${date}T${minutesToTime(item.interval.start)}` : undefined)
     void saveRecord({
       id: recordId(date, item.id),
       date,
       itemId: item.id,
       sourceId: item.sourceId ?? item.id,
       status,
-      actualStart: existingRec?.actualStart,
-      // 完了申告で実終了が無ければ予定終了時刻を用いる（§14.2）。
+      actualStart,
       actualEnd:
         status === 'completed'
           ? (existingRec?.actualEnd ?? `${date}T${minutesToTime(item.interval.end)}`)

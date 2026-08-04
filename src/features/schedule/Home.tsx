@@ -16,6 +16,7 @@ import type { ActivityRecord, Category, Id } from '../../domain/types'
 import { recordId } from '../../domain/types'
 import { minutesToTime } from '../../domain/scheduler/intervals'
 import { scheduleDay } from '../../domain/scheduler/scheduleDay'
+import { completedMinutesByTask } from '../../domain/analytics/progress'
 import type { PlacedItem } from '../../domain/scheduler/placement'
 import { useAppStore } from '../../store/appStore'
 
@@ -69,6 +70,8 @@ export function Home() {
     return map
   }, [records, date])
 
+  const completedByTask = useMemo(() => completedMinutesByTask(records), [records])
+
   const { current, next } = useMemo(() => {
     const referenceTime = isoDateTime(now)
     const { timeline } = scheduleDay({
@@ -77,6 +80,7 @@ export function Home() {
       categories: categoryMap,
       window: HOME_WINDOW,
       referenceTime,
+      completedByTask,
     })
     // 完了済みは対象から除く。
     const items = timeline.filter((i) => recordByItem.get(i.id)?.status !== 'completed')
@@ -87,7 +91,7 @@ export function Home() {
       .filter((i) => i.interval.start > nowMin)
       .sort((a, b) => a.interval.start - b.interval.start)[0]
     return { current, next }
-  }, [now, date, nowMin, definitions, categoryMap, recordByItem])
+  }, [now, date, nowMin, definitions, categoryMap, recordByItem, completedByTask])
 
   function start(item: PlacedItem) {
     const at = isoDateTime(new Date())

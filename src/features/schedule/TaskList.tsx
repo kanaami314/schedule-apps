@@ -16,6 +16,7 @@
 import { useMemo, useState } from 'react'
 import type { Category, FlexibleTask, Id } from '../../domain/types'
 import { scheduleDay } from '../../domain/scheduler/scheduleDay'
+import { completedMinutesByTask } from '../../domain/analytics/progress'
 import { newId } from '../../lib/ids'
 import { useAppStore } from '../../store/appStore'
 
@@ -118,6 +119,7 @@ function Wishlist() {
 export function TaskList() {
   const definitions = useAppStore((s) => s.definitions)
   const categories = useAppStore((s) => s.categories)
+  const records = useAppStore((s) => s.records)
   const minimalMode = useAppStore((s) => s.minimalMode)
   const categoryName = useMemo(
     () => new Map(categories.map((c) => [c.id, c.name])),
@@ -143,18 +145,19 @@ export function TaskList() {
       { key: 'later', title: 'それ以降', className: 'text-gray-500', tasks: grouped.later },
     ]
 
-    // 未配置: 本日の既定窓で自動配置して置けなかった柔軟タスク（§16.6）。
+    // 未配置: 本日の既定窓で自動配置して置けなかった柔軟タスク（§16.6）。実績分は残量から除く。
     const categoryMap = new Map<Id, Category>(categories.map((c) => [c.id, c]))
     const { unplaced: unplacedResult } = scheduleDay({
       date: today,
       definitions,
       categories: categoryMap,
       window: TODAY_WINDOW,
+      completedByTask: completedMinutesByTask(records),
     })
     const unplaced = unplacedResult.map((u) => u.task)
 
     return { buckets, unplaced }
-  }, [definitions, categories])
+  }, [definitions, categories, records])
 
   const total = buckets.reduce((n, b) => n + b.tasks.length, 0)
   if (total === 0) {

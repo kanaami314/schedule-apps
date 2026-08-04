@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import type { Category, FlexibleTask, Id } from '../types'
+import type { Category, FlexibleTask, FreeActivity, Id } from '../types'
 import { scheduleRange } from './scheduleRange'
+
+function free(o: Partial<FreeActivity> & { id: string; duration: number }): FreeActivity {
+  return { kind: 'free', createdAt: '2026-08-01T00:00', updatedAt: '2026-08-01T00:00', name: o.id, ...o }
+}
 
 const noCategories = new Map<Id, Category>()
 
@@ -47,5 +51,33 @@ describe('scheduleRange（複数日配分）', () => {
     })
     expect(placedMinutes(result, '2026-08-05', 'big')).toBe(180)
     expect(placedMinutes(result, '2026-08-06', 'big')).toBe(120)
+  })
+
+  it('実績(completedByTask)を差し引いて残量を配分する', () => {
+    // 推定300分・分割可、実績180分完了 → 残り120分。窓180分/日 → 初日に120、翌日0。
+    const result = scheduleRange({
+      dates: ['2026-08-05', '2026-08-06'],
+      categories: noCategories,
+      window: { start: 540, end: 720 },
+      definitions: [flex({ id: 'big', estimatedDuration: 300, splittable: true, minChunk: 60 })],
+      completedByTask: new Map([['big', 180]]),
+    })
+    expect(placedMinutes(result, '2026-08-05', 'big')).toBe(120)
+    expect(placedMinutes(result, '2026-08-06', 'big')).toBe(0)
+  })
+
+  it('自由活動の希望頻度（週N回）を守る', () => {
+    // 週2回の自由活動。同週の月〜金5日 → 2日だけ配置される。
+    const dates = ['2026-08-03', '2026-08-04', '2026-08-05', '2026-08-06', '2026-08-07'] // 月〜金
+    const result = scheduleRange({
+      dates,
+      categories: noCategories,
+      window: { start: 540, end: 720 },
+      definitions: [free({ id: 'game', duration: 60, frequency: { count: 2, unit: 'week' } })],
+    })
+    const placedDays = dates.filter((d) =>
+      result.get(d)?.timeline.some((i) => i.kind === 'free' && i.sourceId === 'game'),
+    )
+    expect(placedDays).toHaveLength(2)
   })
 })

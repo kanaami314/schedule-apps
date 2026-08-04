@@ -10,6 +10,7 @@ import type { Category, Id, ScheduleDefinition } from '../../domain/types'
 import { categoryChain } from '../../domain/load/inheritance'
 import { minutesToTime } from '../../domain/scheduler/intervals'
 import { scheduleRange } from '../../domain/scheduler/scheduleRange'
+import { completedMinutesByTask } from '../../domain/analytics/progress'
 import type { PlacedItem } from '../../domain/scheduler/placement'
 import { useAppStore } from '../../store/appStore'
 
@@ -42,7 +43,9 @@ export function CalendarView() {
   const definitions = useAppStore((s) => s.definitions)
   const categories = useAppStore((s) => s.categories)
   const projects = useAppStore((s) => s.projects)
+  const records = useAppStore((s) => s.records)
   const minimalMode = useAppStore((s) => s.minimalMode)
+  const completedByTask = useMemo(() => completedMinutesByTask(records), [records])
 
   const [view, setView] = useState<View>('week')
   const [anchor, setAnchor] = useState(() => new Date())
@@ -88,8 +91,8 @@ export function CalendarView() {
   // 表示範囲の全日を複数日配分でまとめて組む（柔軟タスクが日をまたいで分散される）。
   const rangeResults = useMemo(() => {
     const dates = (view === 'week' ? weekDates : monthGrid).map(toIso)
-    return scheduleRange({ dates, definitions, categories: categoryMap })
-  }, [view, weekDates, monthGrid, definitions, categoryMap])
+    return scheduleRange({ dates, definitions, categories: categoryMap, completedByTask })
+  }, [view, weekDates, monthGrid, definitions, categoryMap, completedByTask])
 
   /** 対象日の配置予定（休憩を除く・カテゴリ/プロジェクト絞り込み適用）。 */
   const itemsOf = (date: string): PlacedItem[] => {
