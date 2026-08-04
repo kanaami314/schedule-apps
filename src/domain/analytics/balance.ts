@@ -47,6 +47,10 @@ export interface BalanceResult {
   totalActual: number
   /** 負荷分析（§20.7）。 */
   load: LoadAnalysis
+  /** 集計期間の総時間（分）＝ 日数 × 24h（§20.4 の分母「選択期間全体」）。 */
+  periodMinutes: number
+  /** 期間内に配置された睡眠時間の合計（分）。§20.4 の「睡眠を除いた利用可能時間」に使う。 */
+  sleepMinutes: number
 }
 
 const pad = (n: number) => String(n).padStart(2, '0')
@@ -121,11 +125,19 @@ export function computeBalance(
   // 負荷分析（§20.7）用の、時間で重み付けした軸別の負荷レベル合計。
   const loadSum = { focus: 0, mental: 0, physical: 0 }
   let loadMinutes = 0
+  // §20.4 の分母用: 睡眠時間の合計。
+  const sleepRoutineIds = new Set(
+    definitions.filter((d) => d.kind === 'routine' && d.routineType === 'sleep').map((d) => d.id),
+  )
+  let sleepMinutes = 0
 
   for (const date of dates) {
     const { timeline } = scheduleDay({ date, definitions, categories })
     const itemById = new Map(timeline.map((i) => [i.id, i]))
     for (const item of timeline) {
+      if (item.kind === 'routine' && item.sourceId && sleepRoutineIds.has(item.sourceId)) {
+        sleepMinutes += dur(item.interval)
+      }
       if (item.kind === 'break') continue
       add(planned, topLevel(item.categoryId), dur(item.interval))
       if (item.load) {
@@ -167,5 +179,7 @@ export function computeBalance(
     totalPlanned: [...planned.values()].reduce((s, n) => s + n, 0),
     totalActual: [...actual.values()].reduce((s, n) => s + n, 0),
     load,
+    periodMinutes: dates.length * 24 * 60,
+    sleepMinutes,
   }
 }

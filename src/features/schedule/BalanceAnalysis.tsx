@@ -44,6 +44,14 @@ const tabClass = (active: boolean) =>
       : 'border border-gray-300 text-gray-600 dark:border-gray-600 dark:text-gray-300'
   }`
 
+/** 割合の分母（§20.4）。 */
+type Denominator = 'total' | 'available' | 'period'
+const DENOMINATORS: { value: Denominator; label: string }[] = [
+  { value: 'total', label: '登録合計' },
+  { value: 'available', label: '睡眠を除く時間' },
+  { value: 'period', label: '期間全体' },
+]
+
 function fmtMinutes(min: number): string {
   const h = Math.floor(min / 60)
   const m = min % 60
@@ -58,6 +66,7 @@ export function BalanceAnalysis() {
 
   const [period, setPeriod] = useState<BalancePeriod>('thisWeek')
   const [mode, setMode] = useState<Mode>('planned')
+  const [denom, setDenom] = useState<Denominator>('total')
 
   const categoryMeta = useMemo(
     () => new Map<Id, Category>(categories.map((c) => [c.id, c])),
@@ -81,6 +90,14 @@ export function BalanceAnalysis() {
   const value = (c: { plannedMinutes: number; actualMinutes: number }) =>
     mode === 'actual' ? c.actualMinutes : c.plannedMinutes
 
+  // §20.4: 割合の分母。登録合計 / 睡眠を除いた利用可能時間 / 期間全体 から選ぶ。
+  const denomValue =
+    denom === 'period'
+      ? result.periodMinutes
+      : denom === 'available'
+        ? Math.max(0, result.periodMinutes - result.sleepMinutes)
+        : total
+
   const rows = useMemo(() => {
     const list = [...result.categories]
     if (mode === 'actual') list.sort((a, b) => b.actualMinutes - a.actualMinutes)
@@ -103,6 +120,22 @@ export function BalanceAnalysis() {
           </button>
         ))}
       </div>
+      {mode !== 'compare' && (
+        <label className="flex items-center gap-2 text-xs text-gray-500">
+          割合の分母
+          <select
+            className="rounded border border-gray-300 px-1 py-0.5 text-xs dark:border-gray-600 dark:bg-gray-800"
+            value={denom}
+            onChange={(e) => setDenom(e.target.value as Denominator)}
+          >
+            {DENOMINATORS.map((d) => (
+              <option key={d.value} value={d.value}>
+                {d.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
 
       {rows.length === 0 ? (
         <p className="text-sm text-gray-500">この期間に集計対象の予定がありません。</p>
@@ -139,7 +172,7 @@ export function BalanceAnalysis() {
           {rows.map((c) => {
             const meta = categoryMeta.get(c.categoryId)
             const v = value(c)
-            const pct = total > 0 ? (v / total) * 100 : 0
+            const pct = denomValue > 0 ? (v / denomValue) * 100 : 0
             const target = targetField ? meta?.[targetField] : undefined
             const achievement = target && target > 0 ? Math.round((v / target) * 100) : null
             return (

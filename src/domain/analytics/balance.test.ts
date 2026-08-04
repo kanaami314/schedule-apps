@@ -75,6 +75,16 @@ describe('computeBalance', () => {
     expect(result.load).toEqual({ total: null, focus: null, mental: null, physical: null })
   })
 
+  it('分母用の期間全体時間と睡眠時間を集計する（§20.4）', () => {
+    // 今日=1日 → 期間全体 1440分。睡眠ルーチン 23:00-07:00(翌) は単日窓では 23:00-24:00=60分。
+    const today = computeBalance('today', monday, [], new Map(), [])
+    expect(today.periodMinutes).toBe(1440)
+    // 今週=7日 → 7×1440。
+    const week = computeBalance('thisWeek', monday, [], new Map(), [])
+    expect(week.periodMinutes).toBe(7 * 1440)
+    expect(today.sleepMinutes).toBe(0) // 睡眠ルーチン未登録なので0
+  })
+
   it('完了記録から実績時間を積み上げる', () => {
     const categories = new Map<Id, Category>([['top', category('top', '研究')]])
     const defs: FixedEvent[] = [fixed('a', '2026-08-03', '09:00', '10:00', 'top')]
