@@ -8,8 +8,23 @@
 import { useMemo, useState } from 'react'
 import type { Category, Id } from '../../domain/types'
 import { computeBalance, type BalancePeriod } from '../../domain/analytics/balance'
+import { computeFreeActivityAnalysis } from '../../domain/analytics/freeAnalysis'
+import type { DrainEffect, RecoveryEffect } from '../../domain/types'
 import type { LoadCategory } from '../../domain/load/score'
 import { useAppStore } from '../../store/appStore'
+
+const RECOVERY_LABELS: Record<RecoveryEffect, string> = {
+  relax: 'リラックス',
+  refresh: '気分転換',
+  stressRelief: 'ストレス軽減',
+  achievement: '達成感',
+  motivation: 'やる気',
+}
+const DRAIN_LABELS: Record<DrainEffect, string> = {
+  focus: '集中力消耗',
+  mental: '精神的疲労',
+  physical: '身体的疲労',
+}
 
 const LOAD_LABEL: Record<LoadCategory, { text: string; className: string }> = {
   low: { text: '低い', className: 'bg-green-200 text-green-800 dark:bg-green-800 dark:text-green-100' },
@@ -83,6 +98,11 @@ export function BalanceAnalysis() {
   const result = useMemo(
     () => computeBalance(period, new Date(), definitions, categoryMeta, records, drillParent ?? undefined),
     [period, definitions, categoryMeta, records, drillParent],
+  )
+
+  const freeAnalysis = useMemo(
+    () => computeFreeActivityAnalysis(period, new Date(), definitions, categoryMeta),
+    [period, definitions, categoryMeta],
   )
 
   // §20.6: 今週・先週は週間目標、今月は月間目標。今日は目標を使わない。
@@ -252,6 +272,55 @@ export function BalanceAnalysis() {
             <LoadBadge value={result.load.physical} />
           </div>
         </div>
+      </div>
+
+      {/* 自由活動分析（§20.8） */}
+      <div className="rounded-lg border border-gray-200 p-3 dark:border-gray-700">
+        <h4 className="mb-2 text-sm font-semibold">
+          自由活動分析
+          <span className="ml-2 text-xs text-gray-500">合計 {fmtMinutes(freeAnalysis.totalMinutes)}</span>
+        </h4>
+        {freeAnalysis.totalMinutes === 0 ? (
+          <p className="text-xs text-gray-400">この期間に配置された自由活動はありません。</p>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div>
+              <p className="mb-1 text-xs font-medium text-gray-500">回復効果別</p>
+              <ul className="space-y-0.5 text-sm">
+                {freeAnalysis.byRecovery.map((r) => (
+                  <li key={r.effect} className="flex justify-between">
+                    <span>{RECOVERY_LABELS[r.effect]}</span>
+                    <span className="text-gray-500">{fmtMinutes(r.minutes)}</span>
+                  </li>
+                ))}
+                {freeAnalysis.byRecovery.length === 0 && <li className="text-xs text-gray-400">なし</li>}
+              </ul>
+            </div>
+            <div>
+              <p className="mb-1 text-xs font-medium text-gray-500">消耗効果別</p>
+              <ul className="space-y-0.5 text-sm">
+                {freeAnalysis.byDrain.map((r) => (
+                  <li key={r.effect} className="flex justify-between">
+                    <span>{DRAIN_LABELS[r.effect]}</span>
+                    <span className="text-gray-500">{fmtMinutes(r.minutes)}</span>
+                  </li>
+                ))}
+                {freeAnalysis.byDrain.length === 0 && <li className="text-xs text-gray-400">なし</li>}
+              </ul>
+            </div>
+            <div>
+              <p className="mb-1 text-xs font-medium text-gray-500">強度別</p>
+              <ul className="space-y-0.5 text-sm">
+                {freeAnalysis.byIntensity.map((r) => (
+                  <li key={r.intensity} className="flex justify-between">
+                    <span>{['', '弱い', '普通', '強い'][r.intensity]}</span>
+                    <span className="text-gray-500">{fmtMinutes(r.minutes)}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
