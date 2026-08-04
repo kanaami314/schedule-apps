@@ -71,4 +71,38 @@ describe('insertBreaks (§12 / C-4)', () => {
     const { breaks } = insertBreaks(entries, day)
     expect(breaks[0].interval).toEqual(iv(120, 130)) // 10分
   })
+
+  it('直後に空きが無くても、可動予定を後ろへずらして休憩を確保する（§3 / I-1）', () => {
+    // 6.0の固定直後に隙間なく可動な柔軟タスク。後方は空いている → 柔軟を後ろへ動かし15分休憩。
+    const entries: TimelineEntry[] = [
+      { interval: iv(0, 120), segment: { type: 'load', load: load(3, 3, 3), minutes: 120 }, movable: false },
+      { interval: iv(120, 180), segment: { type: 'load', load: load(2, 2, 2), minutes: 60 }, movable: true, id: 't1' },
+    ]
+    const { breaks, moved } = insertBreaks(entries, day)
+    expect(breaks[0].interval).toEqual(iv(120, 135)) // 直後に15分休憩
+    expect(moved.get('t1')).toEqual(iv(135, 195)) // 柔軟タスクは15分後ろへ
+  })
+
+  it('壁（固定予定）までの範囲で確保できる最大時間に短縮する（§3 / C-4）', () => {
+    // 固定→柔軟(可動)→固定(壁, 185開始)。壁まで容量5分 → 5分休憩＋柔軟を185直前まで移動。
+    const entries: TimelineEntry[] = [
+      { interval: iv(0, 120), segment: { type: 'load', load: load(3, 3, 3), minutes: 120 }, movable: false },
+      { interval: iv(120, 180), segment: { type: 'load', load: load(2, 2, 2), minutes: 60 }, movable: true, id: 't1' },
+      { interval: iv(185, 245), segment: { type: 'load', load: load(2, 2, 2), minutes: 60 }, movable: false },
+    ]
+    const { breaks, moved } = insertBreaks(entries, day)
+    expect(breaks[0].interval).toEqual(iv(120, 125)) // 5分
+    expect(moved.get('t1')).toEqual(iv(125, 185)) // 壁の直前まで
+  })
+
+  it('可動予定を動かしても稼働終了までに5分すら確保できなければ休憩を配置しない', () => {
+    // 固定→柔軟(可動)で稼働窓が 182 で終わる → 容量2分 → 配置せず移動もしない。
+    const entries: TimelineEntry[] = [
+      { interval: iv(0, 120), segment: { type: 'load', load: load(3, 3, 3), minutes: 120 }, movable: false },
+      { interval: iv(120, 180), segment: { type: 'load', load: load(2, 2, 2), minutes: 60 }, movable: true, id: 't1' },
+    ]
+    const { breaks, moved } = insertBreaks(entries, iv(0, 182))
+    expect(breaks).toHaveLength(0)
+    expect(moved.size).toBe(0)
+  })
 })

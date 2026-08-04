@@ -104,6 +104,8 @@ export type LoadSegment =
       recoveryEffects?: readonly RecoveryEffectSetting[]
       drainEffects?: readonly DrainEffectSetting[]
     }
+  /** 占有はするが累積負荷を増減しない区間（家事など, §13で回復区間に含めない）。 */
+  | { type: 'neutral'; minutes: Minutes }
 
 /** 1区間を適用した後の累積負荷を返す。 */
 export function applySegment(current: CumulativeLoad, segment: LoadSegment): CumulativeLoad {
@@ -118,6 +120,8 @@ export function applySegment(current: CumulativeLoad, segment: LoadSegment): Cum
         recoveryEffects: segment.recoveryEffects,
         drainEffects: segment.drainEffects,
       })
+    case 'neutral':
+      return current
   }
 }
 

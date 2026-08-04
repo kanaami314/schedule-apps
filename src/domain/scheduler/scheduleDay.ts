@@ -189,34 +189,43 @@ export function scheduleDay(options: ScheduleDayOptions): ScheduleDayResult {
     }
   }
 
-  // 5. 負荷を持つ予定と回復区間（食事/入浴/睡眠）から休憩を挿入。
+  // 5. 負荷を持つ予定・回復区間・占有ブロックから休憩を挿入する（§12 / §3 / C-4）。
+  //    固定予定・生活ルーチンは「壁」（不動）、柔軟タスクは休憩確保のため後ろへ動かせる（I-1）。
   const routineTypeById = new Map(routines.map((r) => [r.id, r.routineType]))
-  const loadEntries: TimelineEntry[] = [...fixedPlacements, ...flexiblePlacements]
+  const load = (p: PlacedItem & { load: ResolvedLoad }): LoadSegment => ({
+    type: 'load',
+    load: p.load,
+    minutes: p.interval.end - p.interval.start,
+  })
+  const fixedEntries: TimelineEntry[] = fixedPlacements
     .filter((p): p is PlacedItem & { load: ResolvedLoad } => p.load !== undefined)
-    .map((p) => ({
-      interval: p.interval,
-      segment: {
-        type: 'load',
-        load: p.load,
-        minutes: p.interval.end - p.interval.start,
-      } satisfies LoadSegment,
-    }))
-  const recoveryEntries: TimelineEntry[] = routinePlacements.flatMap((p) => {
+    .map((p) => ({ interval: p.interval, segment: load(p), movable: false, id: p.id }))
+  const flexibleEntries: TimelineEntry[] = flexiblePlacements
+    .filter((p): p is PlacedItem & { load: ResolvedLoad } => p.load !== undefined)
+    .map((p) => ({ interval: p.interval, segment: load(p), movable: true, id: p.id }))
+  // 生活ルーチンは壁として扱う。食事/入浴/睡眠は回復区間、家事は占有のみ（negative無し）。
+  const routineEntries: TimelineEntry[] = routinePlacements.map((p) => {
     const routineType = p.sourceId ? routineTypeById.get(p.sourceId) : undefined
     const recoveryType = routineType ? ROUTINE_RECOVERY[routineType] : undefined
-    if (!recoveryType) return []
-    const entry: TimelineEntry = {
-      interval: p.interval,
-      segment: {
-        type: 'recovery',
-        interval: recoveryType,
-        minutes: p.interval.end - p.interval.start,
-      },
-    }
-    return [entry]
+    const minutes = p.interval.end - p.interval.start
+    const segment: LoadSegment = recoveryType
+      ? { type: 'recovery', interval: recoveryType, minutes }
+      : { type: 'neutral', minutes }
+    return { interval: p.interval, segment, movable: false, id: p.id }
   })
 
-  const { breaks } = insertBreaks([...loadEntries, ...recoveryEntries], window)
+  const { breaks, moved } = insertBreaks(
+    [...fixedEntries, ...flexibleEntries, ...routineEntries],
+    window,
+  )
+
+  // 休憩確保のために後ろへ動いた柔軟タスクの配置を反映する。
+  if (moved.size > 0) {
+    for (const placement of flexiblePlacements) {
+      const next = moved.get(placement.id)
+      if (next) placement.interval = next
+    }
+  }
 
   const timeline = [...fixedPlacements, ...routinePlacements, ...flexiblePlacements, ...breaks].sort(
     (a, b) => a.interval.start - b.interval.start,

@@ -213,6 +213,24 @@ describe('scheduleDay', () => {
     expect(result.unplaced).toHaveLength(0)
   })
 
+  it('休憩確保のため柔軟タスクを後ろへ動かして休憩を挿入する（§3 / I-1）', () => {
+    // 窓 9:00-14:00。高負荷固定 9:00-11:00(6.0) の直後に柔軟60分が貪欲配置される。
+    // 直後に空きが無いので柔軟を後ろへずらし、11:00 直後に休憩を確保する。
+    const result = scheduleDay({
+      date: DATE,
+      categories: noCategories,
+      window: { start: 540, end: 840 }, // 9:00-14:00
+      definitions: [
+        fixed({ id: 'hard', start: '09:00', end: '11:00', load: { focus: 3, mental: 3, physical: 3 } }),
+        flex({ id: 't', estimatedDuration: 60, splittable: false }),
+      ],
+    })
+    const brk = result.timeline.find((i) => i.kind === 'break')
+    const task = result.timeline.find((i) => i.sourceId === 't')
+    expect(brk?.interval).toEqual({ start: 660, end: 675 }) // 11:00 直後に15分休憩
+    expect(task?.interval).toEqual({ start: 675, end: 735 }) // 柔軟タスクは休憩の後ろへ
+  })
+
   it('高負荷が連続すると休憩が挿入される', () => {
     // (3,3,3) の固定2時間 + 高負荷タスクで 6.0 を超え、直後の空きに休憩
     const result = scheduleDay({
