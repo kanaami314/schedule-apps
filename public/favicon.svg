@@ -1,0 +1,13 @@
+<svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="kr-wave" x1="15" y1="33" x2="51" y2="33" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7FD3C1"/>
+      <stop offset="1" stop-color="#1FB5A7"/>
+    </linearGradient>
+  </defs>
+  <path d="M47.56 47.56 A22 22 0 1 1 47.56 16.44" stroke="#1FB5A7" stroke-width="7" stroke-linecap="round"/>
+  <path d="M15 33 H26 L30 23 L34.5 44 L39 29 L42.5 33 H51" stroke="url(#kr-wave)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="52.5" cy="15.5" r="2.8" fill="#1FB5A7"/>
+  <circle cx="58.5" cy="10.5" r="2.1" fill="#6FA8FF"/>
+  <circle cx="50.5" cy="49.5" r="3.3" fill="#6FA8FF"/>
+</svg>

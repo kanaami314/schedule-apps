@@ -102,10 +102,13 @@ function App() {
     <div className="mx-auto max-w-4xl p-4 sm:p-6">
       <ScheduleToast />
       <header className="mb-4 flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold">くるリズム</h1>
-          <p className="text-sm text-gray-500">暮らしに合わせる自動スケジューラ</p>
-        </div>
+        {/* 採用ロゴ（くるリズム＋副題）。装飾のためテキストは sr-only の h1 で担保。 */}
+        <h1 className="sr-only">くるリズム</h1>
+        <img
+          src="/logo-lockup.svg"
+          alt="くるリズム 暮らしに合わせる自動スケジューラ"
+          className="h-14 w-auto max-w-full sm:h-16"
+        />
         <label className="flex shrink-0 items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
           <input
             type="checkbox"
