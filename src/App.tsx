@@ -105,7 +105,7 @@ function App() {
         {/* 採用ロゴ（くるリズム＋副題）。装飾のためテキストは sr-only の h1 で担保。 */}
         <h1 className="sr-only">くるリズム</h1>
         <img
-          src="/logo-lockup.svg"
+          src={`${import.meta.env.BASE_URL}logo-lockup.svg`}
           alt="くるリズム 暮らしに合わせる自動スケジューラ"
           className="h-14 w-auto max-w-full sm:h-16"
         />
