@@ -111,6 +111,44 @@ describe('placeFlexibleTasks — 分割可能', () => {
   })
 })
 
+describe('placeFlexibleTasks — 実行可能時間帯（日またぎ）', () => {
+  it('日をまたぐ許可範囲（22:00〜02:00）の夜間側に配置できる', () => {
+    // 早朝が埋まっており、夜間 22:00-24:00 のみ空く状況。
+    const opts: PlaceOptions = {
+      window: iv(0, 1440),
+      busy: [iv(0, 1320)], // 00:00-22:00 を占有 → 空きは 1320-1440 のみ
+      tasks: [
+        task({
+          id: 'night',
+          estimatedDuration: 90,
+          allowedTimeRanges: [{ start: '22:00', end: '02:00' }],
+        }),
+      ],
+    }
+    const { placements, unplaced } = placeFlexibleTasks(opts)
+    expect(unplaced).toHaveLength(0)
+    // 夜間 1320-1440 に前詰め（22:00-23:30）される
+    expect(placements[0].interval).toEqual(iv(1320, 1410))
+  })
+
+  it('日またぎ範囲で夜間が埋まっていれば早朝へ回る', () => {
+    const opts: PlaceOptions = {
+      window: iv(0, 1440),
+      busy: [iv(60, 1440)], // 01:00-24:00 を占有 → 空きは 0-60 のみ
+      tasks: [
+        task({
+          id: 'night',
+          estimatedDuration: 45,
+          allowedTimeRanges: [{ start: '22:00', end: '02:00' }],
+        }),
+      ],
+    }
+    const { placements, unplaced } = placeFlexibleTasks(opts)
+    expect(unplaced).toHaveLength(0)
+    expect(placements[0].interval).toEqual(iv(0, 45)) // 00:00-00:45（早朝側）
+  })
+})
+
 describe('placeFlexibleTasks — 優先度の高いタスクが先に空きを取る', () => {
   it('整列順に前詰めされ、後続は残りに入る', () => {
     const opts: PlaceOptions = {

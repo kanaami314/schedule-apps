@@ -14,7 +14,7 @@ import {
   duration,
   freeGaps,
   mergeIntervals,
-  timeToMinutes,
+  timeRangeToIntervals,
   totalDuration,
   type Interval,
 } from './intervals'
@@ -143,11 +143,9 @@ export function placeFlexibleTasks(options: PlaceOptions): PlacementResult {
   for (const task of options.tasks) {
     let gaps = freeGaps(options.window, occupied)
     // 実行可能時間帯（§5.2）が指定されていれば、その範囲内の空きに限定する。
+    // 日をまたぐ範囲（例 22:00〜02:00）は同日内の夜間＋早朝の2区間へ展開する。
     if (task.allowedTimeRanges && task.allowedTimeRanges.length > 0) {
-      const allowed = task.allowedTimeRanges.map((r) => ({
-        start: timeToMinutes(r.start),
-        end: timeToMinutes(r.end),
-      }))
+      const allowed = task.allowedTimeRanges.flatMap(timeRangeToIntervals)
       gaps = intersectIntervals(gaps, allowed)
     }
     // 関連固定予定の条件（§5.4）による配置ウィンドウ制約を重ねる。

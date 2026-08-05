@@ -26,7 +26,7 @@ import { resolveLoad } from '../load/inheritance'
 import type { LoadSegment } from '../load/continuous'
 import type { RecoveryIntervalType } from '../load/recovery'
 import { insertBreaks, type TimelineEntry } from './breakInsertion'
-import { duration, freeGaps, timeToMinutes, type Interval } from './intervals'
+import { duration, freeGaps, timeRangeToIntervals, timeToMinutes, type Interval } from './intervals'
 import { intersectIntervals, placeFlexibleTasks, type PlacedItem, type Unplaced } from './placement'
 import { orderFlexibleTasks } from './taskOrder'
 import { occursOn } from './repeat'
@@ -66,6 +66,12 @@ export interface ScheduleDayOptions {
   allowPartialSplit?: boolean
   /** この日は配置しない自由活動の ID（希望頻度の上限に達した等）。 */
   skipFreeIds?: ReadonlySet<Id>
+  /**
+   * この日付より前（過去）には柔軟タスク・自由活動を自動配置しない基準日（既定なし）。
+   * カレンダー等で「過去日に新規の作業を置かない」ために使う（§17 の再計算は常に今日基準）。
+   * 固定予定・生活ルーチンは実在の予定なので過去日でも表示する。
+   */
+  notBefore?: IsoDate
 }
 
 export interface ScheduleDayResult {
@@ -133,6 +139,8 @@ export function scheduleDay(options: ScheduleDayOptions): ScheduleDayResult {
   const window = options.window ?? FULL_DAY
   const referenceTime = options.referenceTime ?? `${options.date}T00:00`
   const weekday = weekdayOf(options.date)
+  // 過去日には新規の作業（柔軟タスク・自由活動）を自動配置しない（実在の固定・ルーチンは表示する）。
+  const excludePast = options.notBefore !== undefined && options.date < options.notBefore
 
   // 1. 固定予定（対象日に出現するもの）を占有として確定。繰り返しは基準日から展開（§4.3）。
   const fixedDefs: FixedEvent[] = options.definitions.filter(
@@ -163,7 +171,7 @@ export function scheduleDay(options: ScheduleDayOptions): ScheduleDayResult {
   // 3. 柔軟なタスクを整列して残りの空きへ貪欲配置。
   //    開始可能日・実行可能曜日(§5.2)を満たすタスクのみ、この日の配置対象にする。
   //    複数日配分では、この日に配置してよい残量(remainingByTask)を上限にする。
-  const flexibleTasks = options.definitions
+  const flexibleTasks = (excludePast ? [] : options.definitions)
     .filter(
       (d): d is Extract<ScheduleDefinition, { kind: 'flexible' }> =>
         d.kind === 'flexible' &&
@@ -228,7 +236,7 @@ export function scheduleDay(options: ScheduleDayOptions): ScheduleDayResult {
   //     ものを、固定・ルーチン・柔軟タスクを除いた残りの空きへ配置する。実行可能時間帯を尊重し、
   //     希望実行時間ぶん（入らなければ最短実行時間まで短縮して）1ブロック置く。
   //     ※ 希望頻度（週N回）の厳密遵守は複数日対応で完成（現状は値を保持するのみ）。
-  const freeActivities = options.definitions.filter(
+  const freeActivities = (excludePast ? [] : options.definitions).filter(
     (d): d is FreeActivity =>
       d.kind === 'free' &&
       (d.autoPlace ?? true) &&
@@ -241,10 +249,8 @@ export function scheduleDay(options: ScheduleDayOptions): ScheduleDayResult {
   for (const fa of freeActivities) {
     let gaps = freeGaps(window, freeOccupied)
     if (fa.allowedTimeRanges && fa.allowedTimeRanges.length > 0) {
-      const allowed = fa.allowedTimeRanges.map((r) => ({
-        start: timeToMinutes(r.start),
-        end: timeToMinutes(r.end),
-      }))
+      // 日をまたぐ範囲（例 22:00〜02:00）は同日内の夜間＋早朝の2区間へ展開する。
+      const allowed = fa.allowedTimeRanges.flatMap(timeRangeToIntervals)
       gaps = intersectIntervals(gaps, allowed)
     }
     const want = fa.duration

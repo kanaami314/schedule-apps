@@ -3,7 +3,7 @@
  * 対象日と稼働時間帯を選び「自動配置」で、固定予定＋柔軟タスクから配置＋休憩挿入を実行する。
  */
 
-import { useMemo, useState, type CSSProperties } from 'react'
+import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import type { Category, Id, ResolvedLoad } from '../../domain/types'
 import { minutesToTime, type Interval } from '../../domain/scheduler/intervals'
 import { scheduleDay, FULL_DAY } from '../../domain/scheduler/scheduleDay'
@@ -72,16 +72,22 @@ function DayGrid({
   timeline,
   window,
   categories,
+  nowMinutes,
 }: {
   timeline: PlacedItem[]
   window: Interval
   categories: ReadonlyMap<Id, Category>
+  /** 現在時刻ライン（分, 対象日が今日のときのみ渡す）。窓外なら描画しない。 */
+  nowMinutes?: number
 }) {
   const height = (window.end - window.start) * PX_PER_MIN
   const firstHour = Math.ceil(window.start / 60)
   const lastHour = Math.floor(window.end / 60)
   const hours: number[] = []
   for (let h = firstHour; h <= lastHour; h++) hours.push(h)
+
+  const showNow = nowMinutes !== undefined && nowMinutes >= window.start && nowMinutes <= window.end
+  const nowTop = showNow ? (nowMinutes! - window.start) * PX_PER_MIN : 0
 
   return (
     <div className="relative overflow-hidden rounded border border-gray-200 dark:border-gray-700" style={{ height }}>
@@ -122,6 +128,15 @@ function DayGrid({
           )
         })}
       </div>
+      {/* 現在時刻ライン（今日のみ）。予定ブロックより前面に赤い線を引く。 */}
+      {showNow && (
+        <div className="pointer-events-none absolute left-0 right-1 z-10 flex items-center" style={{ top: nowTop }}>
+          <span className="ml-0.5 rounded bg-red-500 px-1 font-mono text-[9px] leading-tight text-white">
+            {minutesToTime(nowMinutes!)}
+          </span>
+          <div className="h-px flex-1 bg-red-500" />
+        </div>
+      )}
     </div>
   )
 }
@@ -138,6 +153,21 @@ export function DaySchedule() {
   const categories = useAppStore((s) => s.categories)
   const records = useAppStore((s) => s.records)
   const [date, setDate] = useState(todayIso())
+
+  // 現在時刻ライン用に1分ごとに現在時刻（分）を更新する。
+  const [nowMinutes, setNowMinutes] = useState(() => {
+    const n = new Date()
+    return n.getHours() * 60 + n.getMinutes()
+  })
+  useEffect(() => {
+    const tick = () => {
+      const n = new Date()
+      setNowMinutes(n.getHours() * 60 + n.getMinutes())
+    }
+    const timer = setInterval(tick, 60_000)
+    return () => clearInterval(timer)
+  }, [])
+  const isToday = date === todayIso()
 
   const categoryMap = useMemo(
     () => new Map<Id, Category>(categories.map((c) => [c.id, c])),
@@ -164,7 +194,12 @@ export function DaySchedule() {
         {result.timeline.length === 0 ? (
           <p className="text-sm text-gray-500">この日に配置された予定はありません。</p>
         ) : (
-          <DayGrid timeline={result.timeline} window={DAY_WINDOW} categories={categoryMap} />
+          <DayGrid
+            timeline={result.timeline}
+            window={DAY_WINDOW}
+            categories={categoryMap}
+            nowMinutes={isToday ? nowMinutes : undefined}
+          />
         )}
 
         {result.unplaced.length > 0 && (

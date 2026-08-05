@@ -4,11 +4,30 @@ import {
   freeGaps,
   mergeIntervals,
   overlaps,
+  timeRangeToIntervals,
   totalDuration,
   type Interval,
 } from './intervals'
 
 const iv = (start: number, end: number): Interval => ({ start, end })
+
+describe('timeRangeToIntervals（日またぎ対応）', () => {
+  it('通常の範囲は単一区間', () => {
+    expect(timeRangeToIntervals({ start: '09:00', end: '12:00' })).toEqual([{ start: 540, end: 720 }])
+  })
+  it('日をまたぐ範囲は夜間と早朝の2区間に分割', () => {
+    expect(timeRangeToIntervals({ start: '22:00', end: '02:00' })).toEqual([
+      { start: 1320, end: 1440 },
+      { start: 0, end: 120 },
+    ])
+  })
+  it('幅0は許可なし（空配列）', () => {
+    expect(timeRangeToIntervals({ start: '09:00', end: '09:00' })).toEqual([])
+  })
+  it('00:00 終わりの夜間のみ範囲は早朝側を出さない', () => {
+    expect(timeRangeToIntervals({ start: '22:00', end: '00:00' })).toEqual([{ start: 1320, end: 1440 }])
+  })
+})
 
 describe('duration / overlaps', () => {
   it('duration は長さ、負は0', () => {

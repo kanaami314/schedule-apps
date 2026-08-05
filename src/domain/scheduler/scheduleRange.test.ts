@@ -66,6 +66,36 @@ describe('scheduleRange（複数日配分）', () => {
     expect(placedMinutes(result, '2026-08-06', 'big')).toBe(0)
   })
 
+  it('notBefore より前（過去日）には柔軟タスクを配置せず、当日以降の空きへ配分する', () => {
+    // 今日=08-05。週(月〜日)を渡しても過去日(03,04)には置かず、当日(05)へ配置する。
+    const dates = ['2026-08-03', '2026-08-04', '2026-08-05', '2026-08-06', '2026-08-07']
+    const result = scheduleRange({
+      dates,
+      categories: noCategories,
+      window: { start: 540, end: 720 },
+      definitions: [flex({ id: 't', estimatedDuration: 60 })],
+      notBefore: '2026-08-05',
+    })
+    expect(placedMinutes(result, '2026-08-03', 't')).toBe(0) // 過去日は空
+    expect(placedMinutes(result, '2026-08-04', 't')).toBe(0)
+    expect(placedMinutes(result, '2026-08-05', 't')).toBe(60) // 当日に配置
+  })
+
+  it('過去日で容量を消費しないため、当日以降にちょうど残量ぶん配分できる', () => {
+    // 300分・分割可(最短60)。窓180分/日。過去日(04)は置かず、05→180・06→120。
+    const dates = ['2026-08-04', '2026-08-05', '2026-08-06']
+    const result = scheduleRange({
+      dates,
+      categories: noCategories,
+      window: { start: 540, end: 720 },
+      definitions: [flex({ id: 'big', estimatedDuration: 300, splittable: true, minChunk: 60 })],
+      notBefore: '2026-08-05',
+    })
+    expect(placedMinutes(result, '2026-08-04', 'big')).toBe(0)
+    expect(placedMinutes(result, '2026-08-05', 'big')).toBe(180)
+    expect(placedMinutes(result, '2026-08-06', 'big')).toBe(120)
+  })
+
   it('自由活動の希望頻度（週N回）を守る', () => {
     // 週2回の自由活動。同週の月〜金5日 → 2日だけ配置される。
     const dates = ['2026-08-03', '2026-08-04', '2026-08-05', '2026-08-06', '2026-08-07'] // 月〜金

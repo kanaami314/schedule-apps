@@ -11,16 +11,20 @@ import { CalendarView } from './features/schedule/CalendarView'
 import { GoalProjectManager } from './features/schedule/GoalProjectManager'
 import { NotificationCenter } from './features/schedule/NotificationCenter'
 import { TagManager } from './features/schedule/TagManager'
+import { Modal } from './features/schedule/Modal'
 
 /** 選択中タブの永続化キー。 */
 const TAB_KEY = 'schedule-app.activeTab'
 
-type TabKey = 'home' | 'plans' | 'tasks' | 'schedule' | 'review' | 'settings'
+// §7: 予定作成はスケジュールタブに統合したため 'plans' タブは廃止。
+type TabKey = 'home' | 'tasks' | 'schedule' | 'review' | 'settings'
 
 function loadTab(): TabKey {
   try {
     const v = localStorage.getItem(TAB_KEY)
-    if (v && ['home', 'plans', 'tasks', 'schedule', 'review', 'settings'].includes(v)) {
+    // 旧 'plans'（予定タブ）は 'schedule' に統合済み。
+    if (v === 'plans') return 'schedule'
+    if (v && ['home', 'tasks', 'schedule', 'review', 'settings'].includes(v)) {
       return v as TabKey
     }
   } catch {
@@ -70,6 +74,8 @@ function App() {
   const setMinimalMode = useAppStore((s) => s.setMinimalMode)
 
   const [tab, setTab] = useState<TabKey>(loadTab)
+  // 予定作成モーダル（§7: スケジュール表示中に前面表示）。
+  const [createOpen, setCreateOpen] = useState(false)
 
   useEffect(() => {
     void init()
@@ -86,7 +92,6 @@ function App() {
 
   const tabs: { key: TabKey; label: string }[] = [
     { key: 'home', label: 'ホーム' },
-    { key: 'plans', label: '予定' },
     { key: 'tasks', label: 'タスク' },
     { key: 'schedule', label: 'スケジュール' },
     { key: 'review', label: '振り返り・分析' },
@@ -94,7 +99,7 @@ function App() {
   ]
 
   return (
-    <div className="mx-auto max-w-4xl p-6">
+    <div className="mx-auto max-w-4xl p-4 sm:p-6">
       <ScheduleToast />
       <header className="mb-4 flex items-start justify-between gap-4">
         <div>
@@ -142,12 +147,6 @@ function App() {
               </>
             )}
 
-            {tab === 'plans' && (
-              <Section title="予定の作成・編集">
-                <ScheduleManager />
-              </Section>
-            )}
-
             {tab === 'tasks' && (
               <Section title="タスク一覧">
                 <TaskList />
@@ -156,12 +155,24 @@ function App() {
 
             {tab === 'schedule' && (
               <>
+                {/* §7: スケジュール表示中に「予定を作成」で前面ポップアップ。 */}
+                <div className="flex justify-end">
+                  <button
+                    onClick={() => setCreateOpen(true)}
+                    className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700"
+                  >
+                    ＋ 予定を作成
+                  </button>
+                </div>
                 <Section title="自動スケジュール">
                   <DaySchedule />
                 </Section>
                 <Section title="カレンダー">
                   <CalendarView />
                 </Section>
+                <Modal open={createOpen} onClose={() => setCreateOpen(false)} title="予定の作成・編集">
+                  <ScheduleManager />
+                </Modal>
               </>
             )}
 

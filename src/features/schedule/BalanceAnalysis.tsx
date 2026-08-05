@@ -178,7 +178,8 @@ export function BalanceAnalysis() {
       {rows.length === 0 ? (
         <p className="text-sm text-gray-500">この期間に集計対象の予定がありません。</p>
       ) : mode === 'compare' ? (
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[20rem] text-sm">
           <thead>
             <tr className="border-b border-gray-200 text-left text-xs text-gray-500 dark:border-gray-700">
               <th className="py-1">カテゴリ</th>
@@ -205,6 +206,7 @@ export function BalanceAnalysis() {
             })}
           </tbody>
         </table>
+        </div>
       ) : (
         <div className="space-y-2">
           {rows.map((c) => {

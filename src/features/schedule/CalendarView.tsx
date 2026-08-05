@@ -91,8 +91,9 @@ export function CalendarView() {
   // 表示範囲の全日を複数日配分でまとめて組む（柔軟タスクが日をまたいで分散される）。
   const rangeResults = useMemo(() => {
     const dates = (view === 'week' ? weekDates : monthGrid).map(toIso)
-    return scheduleRange({ dates, definitions, categories: categoryMap, completedByTask })
-  }, [view, weekDates, monthGrid, definitions, categoryMap, completedByTask])
+    // 過去日には柔軟タスク・自由活動を置かず、今日以降の空きへ順に配分する。
+    return scheduleRange({ dates, definitions, categories: categoryMap, completedByTask, notBefore: today })
+  }, [view, weekDates, monthGrid, definitions, categoryMap, completedByTask, today])
 
   /** 対象日の配置予定（休憩を除く・カテゴリ/プロジェクト絞り込み適用）。 */
   const itemsOf = (date: string): PlacedItem[] => {

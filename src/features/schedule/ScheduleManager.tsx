@@ -25,6 +25,7 @@ import { CategorySelect } from './CategorySelect'
 import { RoutineForm } from './RoutineForm'
 import { FreeActivityForm } from './FreeActivityForm'
 import { TagSelect } from './TagManager'
+import { Collapsible } from './Collapsible'
 
 const cancelButtonClass =
   'rounded border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800'
@@ -110,10 +111,12 @@ function FixedEventForm({ editing, onDone }: EditFormProps) {
   const [tagIds, setTagIds] = useState<Id[]>([])
   const [fixity, setFixity] = useState<Fixity>('strict')
   const [attendanceRequired, setAttendanceRequired] = useState(false)
+  const [detailsOpen, setDetailsOpen] = useState(false)
 
-  // 編集対象が変わったらフォームへ読み込む。
+  // 編集対象が変わったらフォームへ読み込む。既存の詳細を見せるため詳細も展開する。
   useEffect(() => {
     if (!target) return
+    setDetailsOpen(true)
     setName(target.name)
     setDate(target.date)
     setStart(target.time.start)
@@ -161,6 +164,7 @@ function FixedEventForm({ editing, onDone }: EditFormProps) {
     setTagIds([])
     setFixity('strict')
     setAttendanceRequired(false)
+    setDetailsOpen(false)
   }
 
   function toggleWeekday(day: Weekday) {
@@ -257,112 +261,116 @@ function FixedEventForm({ editing, onDone }: EditFormProps) {
             />
           </div>
         </div>
-        <div>
-          <label className={labelClass}>繰り返し</label>
-          <select
-            className={inputClass}
-            value={repeatKind}
-            onChange={(e) => setRepeatKind(e.target.value as RepeatKind)}
-          >
-            {REPEAT_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-          {needsWeekdays && (
-            <div className="mt-2">
-              <WeekdayPicker selected={weekdays} onToggle={toggleWeekday} />
+        <CategorySelect value={categoryId} onChange={setCategoryId} />
+
+        <Collapsible title="詳細設定" open={detailsOpen} onToggle={() => setDetailsOpen((v) => !v)}>
+          <div>
+            <label className={labelClass}>繰り返し</label>
+            <select
+              className={inputClass}
+              value={repeatKind}
+              onChange={(e) => setRepeatKind(e.target.value as RepeatKind)}
+            >
+              {REPEAT_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+            {needsWeekdays && (
+              <div className="mt-2">
+                <WeekdayPicker selected={weekdays} onToggle={toggleWeekday} />
+              </div>
+            )}
+          </div>
+          {!minimalMode && (
+            <div>
+              <label className={labelClass}>付随時間（分）</label>
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <span className="text-[10px] text-gray-400">移動</span>
+                  <input
+                    type="number"
+                    min={0}
+                    className={inputClass}
+                    value={travelMin}
+                    onChange={(e) => setTravelMin(Number(e.target.value))}
+                  />
+                </div>
+                <div className="flex-1">
+                  <span className="text-[10px] text-gray-400">準備</span>
+                  <input
+                    type="number"
+                    min={0}
+                    className={inputClass}
+                    value={prepMin}
+                    onChange={(e) => setPrepMin(Number(e.target.value))}
+                  />
+                </div>
+                <div className="flex-1">
+                  <span className="text-[10px] text-gray-400">終了後</span>
+                  <input
+                    type="number"
+                    min={0}
+                    className={inputClass}
+                    value={bufferMin}
+                    onChange={(e) => setBufferMin(Number(e.target.value))}
+                  />
+                </div>
+              </div>
             </div>
           )}
-        </div>
-        {!minimalMode && (
+          {!minimalMode && (
+            <>
+              <div>
+                <label className={labelClass}>場所（任意）</label>
+                <input className={inputClass} value={place} onChange={(e) => setPlace(e.target.value)} />
+              </div>
+              <div>
+                <label className={labelClass}>オンライン情報（任意）</label>
+                <input
+                  className={inputClass}
+                  placeholder="会議URLなど"
+                  value={onlineInfo}
+                  onChange={(e) => setOnlineInfo(e.target.value)}
+                />
+              </div>
+              <div className="flex items-end gap-2">
+                <div className="flex-1">
+                  <label className={labelClass}>固定度</label>
+                  <select
+                    className={inputClass}
+                    value={fixity}
+                    onChange={(e) => setFixity(e.target.value as Fixity)}
+                  >
+                    <option value="strict">動かさない</option>
+                    <option value="normal">なるべく動かさない</option>
+                    <option value="flexible">調整可</option>
+                  </select>
+                </div>
+                <label className="flex flex-1 items-center gap-2 pb-1 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={attendanceRequired}
+                    onChange={(e) => setAttendanceRequired(e.target.checked)}
+                  />
+                  参加が必要
+                </label>
+              </div>
+            </>
+          )}
           <div>
-            <label className={labelClass}>付随時間（分）</label>
-            <div className="flex gap-2">
-              <div className="flex-1">
-                <span className="text-[10px] text-gray-400">移動</span>
-                <input
-                  type="number"
-                  min={0}
-                  className={inputClass}
-                  value={travelMin}
-                  onChange={(e) => setTravelMin(Number(e.target.value))}
-                />
-              </div>
-              <div className="flex-1">
-                <span className="text-[10px] text-gray-400">準備</span>
-                <input
-                  type="number"
-                  min={0}
-                  className={inputClass}
-                  value={prepMin}
-                  onChange={(e) => setPrepMin(Number(e.target.value))}
-                />
-              </div>
-              <div className="flex-1">
-                <span className="text-[10px] text-gray-400">終了後</span>
-                <input
-                  type="number"
-                  min={0}
-                  className={inputClass}
-                  value={bufferMin}
-                  onChange={(e) => setBufferMin(Number(e.target.value))}
-                />
-              </div>
-            </div>
+            <label className={labelClass}>メモ（任意）</label>
+            <textarea
+              className={`${inputClass} min-h-14`}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+            />
           </div>
-        )}
-        <CategorySelect value={categoryId} onChange={setCategoryId} />
-        {!minimalMode && (
-          <>
-            <div>
-              <label className={labelClass}>場所（任意）</label>
-              <input className={inputClass} value={place} onChange={(e) => setPlace(e.target.value)} />
-            </div>
-            <div>
-              <label className={labelClass}>オンライン情報（任意）</label>
-              <input
-                className={inputClass}
-                placeholder="会議URLなど"
-                value={onlineInfo}
-                onChange={(e) => setOnlineInfo(e.target.value)}
-              />
-            </div>
-            <div className="flex items-end gap-2">
-              <div className="flex-1">
-                <label className={labelClass}>固定度</label>
-                <select
-                  className={inputClass}
-                  value={fixity}
-                  onChange={(e) => setFixity(e.target.value as Fixity)}
-                >
-                  <option value="strict">動かさない</option>
-                  <option value="normal">なるべく動かさない</option>
-                  <option value="flexible">調整可</option>
-                </select>
-              </div>
-              <label className="flex flex-1 items-center gap-2 pb-1 text-sm">
-                <input
-                  type="checkbox"
-                  checked={attendanceRequired}
-                  onChange={(e) => setAttendanceRequired(e.target.checked)}
-                />
-                参加が必要
-              </label>
-            </div>
-          </>
-        )}
-        <div>
-          <label className={labelClass}>メモ（任意）</label>
-          <textarea
-            className={`${inputClass} min-h-14`}
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-          />
-        </div>
-        {!minimalMode && <TagSelect value={tagIds} onChange={setTagIds} />}
-        {!minimalMode && <LoadFields value={load} onChange={setLoad} />}
+          {!minimalMode && <TagSelect value={tagIds} onChange={setTagIds} />}
+          {!minimalMode && <LoadFields value={load} onChange={setLoad} />}
+        </Collapsible>
+
         <div className="flex gap-2">
           <button className={buttonClass} disabled={!canSubmit} onClick={submit}>
             {target ? '更新' : '追加'}
@@ -412,9 +420,11 @@ function FlexibleTaskForm({ editing, onDone }: EditFormProps) {
   const [preferredChunk, setPreferredChunk] = useState(0)
   const [relatedFixedId, setRelatedFixedId] = useState('')
   const [relatedCondition, setRelatedCondition] = useState<RelatedFixedCondition>('completeBeforeStart')
+  const [detailsOpen, setDetailsOpen] = useState(false)
 
   useEffect(() => {
     if (!target) return
+    setDetailsOpen(true)
     setName(target.name)
     setDeadline(target.deadline)
     setDuration(target.estimatedDuration)
@@ -460,6 +470,7 @@ function FlexibleTaskForm({ editing, onDone }: EditFormProps) {
     setPreferredChunk(0)
     setRelatedFixedId('')
     setRelatedCondition('completeBeforeStart')
+    setDetailsOpen(false)
   }
 
   function toggleAllowedWeekday(day: Weekday) {
@@ -470,7 +481,8 @@ function FlexibleTaskForm({ editing, onDone }: EditFormProps) {
 
   async function submit() {
     const now = nowLocalIso()
-    const hasRange = rangeStart !== '' && rangeEnd !== '' && rangeStart < rangeEnd
+    // 日をまたぐ範囲（start > end, 例 22:00〜02:00）も許可する。start === end のみ無効。
+    const hasRange = rangeStart !== '' && rangeEnd !== '' && rangeStart !== rangeEnd
     const task: FlexibleTask = {
       ...(target ?? {}),
       id: target?.id ?? newId(),
@@ -549,6 +561,8 @@ function FlexibleTaskForm({ editing, onDone }: EditFormProps) {
           </div>
         </div>
         <CategorySelect value={categoryId} onChange={setCategoryId} />
+
+        <Collapsible title="詳細設定" open={detailsOpen} onToggle={() => setDetailsOpen((v) => !v)}>
         {projects.length > 0 && (
           <div>
             <label className={labelClass}>プロジェクト</label>
@@ -608,7 +622,7 @@ function FlexibleTaskForm({ editing, onDone }: EditFormProps) {
               <WeekdayPicker selected={allowedWeekdays} onToggle={toggleAllowedWeekday} />
             </div>
             <div>
-              <label className={labelClass}>実行可能時間帯（任意）</label>
+              <label className={labelClass}>実行可能時間帯（任意・日をまたぐ設定も可）</label>
               <div className="flex items-center gap-1">
                 <input
                   type="time"
@@ -692,6 +706,8 @@ function FlexibleTaskForm({ editing, onDone }: EditFormProps) {
         </div>
         {!minimalMode && <TagSelect value={tagIds} onChange={setTagIds} />}
         {!minimalMode && <LoadFields value={load} onChange={setLoad} />}
+        </Collapsible>
+
         <div className="flex gap-2">
           <button className={buttonClass} disabled={!canSubmit} onClick={submit}>
             {target ? '更新' : '追加'}
@@ -810,22 +826,68 @@ function DefinitionList({
   )
 }
 
+/** 予定種類サブタブ（§4〜§7）。最低限モードでは固定・柔軟のみ。 */
+const KIND_TABS: { key: ScheduleDefinition['kind']; label: string }[] = [
+  { key: 'fixed', label: '固定予定' },
+  { key: 'flexible', label: '柔軟なタスク' },
+  { key: 'free', label: '自由活動' },
+  { key: 'routine', label: '生活ルーチン' },
+]
+
+const subTabClass = (active: boolean) =>
+  `rounded px-3 py-1.5 text-sm font-medium ${
+    active
+      ? 'bg-blue-600 text-white'
+      : 'border border-gray-300 text-gray-600 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800'
+  }`
+
 export function ScheduleManager() {
   const [editing, setEditing] = useState<ScheduleDefinition | null>(null)
   const minimalMode = useAppStore((s) => s.minimalMode)
+  const [kind, setKind] = useState<ScheduleDefinition['kind']>('fixed')
+
+  // 最低限モードでは固定・柔軟のみ選べる。
+  const tabs = minimalMode ? KIND_TABS.filter((t) => t.key === 'fixed' || t.key === 'flexible') : KIND_TABS
+
+  // 一覧の「編集」で種類が変わったら、その種類のサブタブへ自動で切り替える。
+  function startEdit(def: ScheduleDefinition) {
+    setEditing(def)
+    setKind(def.kind)
+  }
 
   return (
     <div className="grid gap-6 md:grid-cols-2">
-      <div className="space-y-4">
-        <FixedEventForm editing={editing} onDone={() => setEditing(null)} />
-        <FlexibleTaskForm editing={editing} onDone={() => setEditing(null)} />
+      <div className="space-y-3">
+        {/* 予定種類のサブタブ（§4〜§7） */}
+        <div className="flex flex-wrap gap-1">
+          {tabs.map((t) => (
+            <button
+              key={t.key}
+              className={subTabClass(kind === t.key)}
+              onClick={() => {
+                setKind(t.key)
+                // 別種類へ切り替えたら編集を解除（フォームを新規に戻す）。
+                if (editing && editing.kind !== t.key) setEditing(null)
+              }}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {kind === 'fixed' && <FixedEventForm editing={editing} onDone={() => setEditing(null)} />}
+        {kind === 'flexible' && <FlexibleTaskForm editing={editing} onDone={() => setEditing(null)} />}
         {/* 最低限モードでは自由活動・生活ルーチンの入力を隠す（§23.1）。 */}
-        {!minimalMode && <FreeActivityForm editing={editing} onDone={() => setEditing(null)} />}
-        {!minimalMode && <RoutineForm editing={editing} onDone={() => setEditing(null)} />}
+        {!minimalMode && kind === 'free' && (
+          <FreeActivityForm editing={editing} onDone={() => setEditing(null)} />
+        )}
+        {!minimalMode && kind === 'routine' && (
+          <RoutineForm editing={editing} onDone={() => setEditing(null)} />
+        )}
       </div>
       <div>
         <h3 className="mb-3 font-semibold">登録済みの予定</h3>
-        <DefinitionList editingId={editing?.id ?? null} onEdit={setEditing} />
+        <DefinitionList editingId={editing?.id ?? null} onEdit={startEdit} />
       </div>
     </div>
   )

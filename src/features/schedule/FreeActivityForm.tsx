@@ -21,6 +21,7 @@ import type {
 import { useAppStore } from '../../store/appStore'
 import { newId, nowLocalIso } from '../../lib/ids'
 import { CategorySelect } from './CategorySelect'
+import { Collapsible } from './Collapsible'
 
 const WEEKDAY_LABELS = ['日', '月', '火', '水', '木', '金', '土'] as const
 
@@ -129,10 +130,12 @@ export function FreeActivityForm({ editing, onDone }: FreeActivityFormProps) {
   const [place, setPlace] = useState('')
   const [recovery, setRecovery] = useState(() => initEffects(RECOVERY_EFFECTS))
   const [drain, setDrain] = useState(() => initEffects(DRAIN_EFFECTS))
+  const [detailsOpen, setDetailsOpen] = useState(false)
 
-  // 編集対象が変わったらフォームへ読み込む。
+  // 編集対象が変わったらフォームへ読み込む。既存の詳細を見せるため詳細も展開する。
   useEffect(() => {
     if (!target) return
+    setDetailsOpen(true)
     setName(target.name)
     setDuration(target.duration)
     setMinDuration(target.minDuration ?? 30)
@@ -166,6 +169,7 @@ export function FreeActivityForm({ editing, onDone }: FreeActivityFormProps) {
     setPlace('')
     setRecovery(initEffects(RECOVERY_EFFECTS))
     setDrain(initEffects(DRAIN_EFFECTS))
+    setDetailsOpen(false)
   }
 
   function toggleWeekday(day: Weekday) {
@@ -183,7 +187,8 @@ export function FreeActivityForm({ editing, onDone }: FreeActivityFormProps) {
       effect: e,
       intensity: drain[e].intensity,
     }))
-    const hasRange = rangeStart !== '' && rangeEnd !== '' && rangeStart < rangeEnd
+    // 日をまたぐ範囲（start > end, 例 22:00〜02:00）も許可する。start === end のみ無効。
+    const hasRange = rangeStart !== '' && rangeEnd !== '' && rangeStart !== rangeEnd
     const activity: FreeActivity = {
       ...(target ?? {}),
       id: target?.id ?? newId(),
@@ -244,6 +249,8 @@ export function FreeActivityForm({ editing, onDone }: FreeActivityFormProps) {
           </div>
         </div>
         <CategorySelect value={categoryId} onChange={setCategoryId} />
+
+        <Collapsible title="詳細設定" open={detailsOpen} onToggle={() => setDetailsOpen((v) => !v)}>
         <div className="flex gap-2">
           <div className="flex-1">
             <label className={labelClass}>場所（任意）</label>
@@ -296,7 +303,7 @@ export function FreeActivityForm({ editing, onDone }: FreeActivityFormProps) {
         </div>
         <div className="flex items-end gap-3">
           <div>
-            <label className={labelClass}>実行可能な時間帯（任意）</label>
+            <label className={labelClass}>実行可能な時間帯（任意・日をまたぐ設定も可）</label>
             <div className="flex items-center gap-1">
               <input
                 type="time"
@@ -350,6 +357,7 @@ export function FreeActivityForm({ editing, onDone }: FreeActivityFormProps) {
             ))}
           </div>
         </div>
+        </Collapsible>
 
         <div className="flex gap-2">
           <button className={buttonClass} disabled={!canSubmit} onClick={submit}>

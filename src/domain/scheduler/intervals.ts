@@ -5,7 +5,7 @@
  * 空き時間（フリーギャップ）の算出、重なり判定、結合などを行う。
  */
 
-import type { IsoTime, Minutes } from '../types'
+import type { IsoTime, Minutes, TimeRange } from '../types'
 
 /** 半開区間 [start, end)。単位は「その日の00:00からの分数」。 */
 export interface Interval {
@@ -29,6 +29,25 @@ export function minutesToTime(minutes: Minutes): IsoTime {
 /** 区間の長さ（分）。負なら0とみなす。 */
 export function duration(interval: Interval): Minutes {
   return Math.max(0, interval.end - interval.start)
+}
+
+/**
+ * `HH:mm`〜`HH:mm` の時刻範囲を、その日の分数区間へ変換する（§5.2 実行可能時間帯）。
+ * 終了が開始より後なら単一区間 [start, end)。
+ * 終了が開始以下（日をまたぐ, 例 22:00〜02:00）なら、同日内の夜間 [start, 24:00) と
+ * 早朝 [00:00, end) の2区間に分割して返す（単日スケジューリングで夜間・早朝を許可する近似）。
+ * 幅0（start === end）は「許可なし」とみなし空配列を返す。
+ */
+export function timeRangeToIntervals(range: TimeRange): Interval[] {
+  const start = timeToMinutes(range.start)
+  const end = timeToMinutes(range.end)
+  if (end > start) return [{ start, end }]
+  if (end === start) return []
+  const DAY = 24 * 60
+  const out: Interval[] = []
+  if (start < DAY) out.push({ start, end: DAY })
+  if (end > 0) out.push({ start: 0, end })
+  return out
 }
 
 /** 空（長さ0以下）の区間か。 */
