@@ -5,6 +5,6 @@ import App from './App'
 describe('App', () => {
   it('renders the heading without crashing', () => {
     render(<App />)
-    expect(screen.getByRole('heading', { name: 'タイムスケジューラ' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'くるリズム' })).toBeInTheDocument()
   })
 })

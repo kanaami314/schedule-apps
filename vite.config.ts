@@ -14,8 +14,9 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       manifest: {
-        name: 'タイムスケジューラ',
-        short_name: 'スケジューラ',
+        name: 'くるリズム',
+        short_name: 'くるリズム',
+        description: '暮らしに合わせる自動スケジューラ',
         start_url: '.',
         display: 'standalone',
         background_color: '#ffffff',

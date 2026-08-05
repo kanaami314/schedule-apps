@@ -103,8 +103,8 @@ function App() {
       <ScheduleToast />
       <header className="mb-4 flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">タイムスケジューラ</h1>
-          <p className="text-sm text-gray-500">予定を登録すると IndexedDB に保存されます。</p>
+          <h1 className="text-2xl font-bold">くるリズム</h1>
+          <p className="text-sm text-gray-500">暮らしに合わせる自動スケジューラ</p>
         </div>
         <label className="flex shrink-0 items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
           <input
