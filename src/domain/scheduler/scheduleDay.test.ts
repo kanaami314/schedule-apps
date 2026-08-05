@@ -413,3 +413,81 @@ describe('scheduleDay — 生活ルーチン (§7)', () => {
     expect(withMeal.timeline.some((t) => t.kind === 'routine')).toBe(true)
   })
 })
+
+describe('scheduleDay — 日をまたぐ設定（固定予定・生活ルーチン）', () => {
+  const FULL = { start: 0, end: 1440 }
+
+  it('日をまたぐ固定予定は当日=夜間・翌日=早朝に分割して占有する', () => {
+    const night = fixed({ id: 'night', start: '23:00', end: '01:00' }) // date=2026-08-05
+    // 当日(8/5): 夜間 23:00-24:00 のみ。
+    const d1 = scheduleDay({ date: '2026-08-05', categories: noCategories, window: FULL, definitions: [night] })
+    const ev = d1.timeline.filter((t) => t.sourceId === 'night')
+    expect(ev).toHaveLength(1)
+    expect(ev[0].interval).toEqual({ start: 1380, end: 1440 })
+    // 翌日(8/6): 早朝 00:00-01:00 のみ。
+    const d2 = scheduleDay({ date: '2026-08-06', categories: noCategories, window: FULL, definitions: [night] })
+    const am = d2.timeline.filter((t) => t.sourceId === 'night')
+    expect(am).toHaveLength(1)
+    expect(am[0].interval).toEqual({ start: 0, end: 60 })
+  })
+
+  it('日をまたぐ固定予定の早朝占有で、翌日の早朝には柔軟タスクを置かない', () => {
+    const night = fixed({ id: 'night', start: '23:00', end: '02:00' }) // 8/5 → 翌 02:00
+    const d2 = scheduleDay({
+      date: '2026-08-06',
+      categories: noCategories,
+      window: FULL,
+      definitions: [
+        night,
+        flex({
+          id: 't',
+          estimatedDuration: 60,
+          splittable: false,
+          allowedTimeRanges: [{ start: '00:00', end: '02:00' }],
+        }),
+      ],
+    })
+    expect(d2.timeline.find((i) => i.sourceId === 't')).toBeUndefined()
+  })
+
+  it('日をまたぐ睡眠ルーチンは夜間と早朝の2ブロックに分割される', () => {
+    const sleep = routine({
+      id: 'sleep',
+      routineType: 'sleep',
+      occurrences: [{ allowedRange: { start: '23:00', end: '07:00' }, requiredTime: 480 }],
+    })
+    const d = scheduleDay({ date: '2026-08-05', categories: noCategories, window: FULL, definitions: [sleep] })
+    const blocks = d.timeline
+      .filter((t) => t.kind === 'routine')
+      .map((t) => t.interval)
+      .sort((a, b) => a.start - b.start)
+    // 前夜からの早朝 00:00-07:00 と、当夜の 23:00-24:00。
+    expect(blocks).toEqual([
+      { start: 0, end: 420 },
+      { start: 1380, end: 1440 },
+    ])
+  })
+
+  it('日をまたぐ睡眠の早朝占有で、早朝には柔軟タスクを置かない', () => {
+    const sleep = routine({
+      id: 'sleep',
+      routineType: 'sleep',
+      occurrences: [{ allowedRange: { start: '23:00', end: '07:00' }, requiredTime: 480 }],
+    })
+    const d = scheduleDay({
+      date: '2026-08-05',
+      categories: noCategories,
+      window: FULL,
+      definitions: [
+        sleep,
+        flex({
+          id: 't',
+          estimatedDuration: 60,
+          splittable: false,
+          allowedTimeRanges: [{ start: '05:00', end: '06:30' }],
+        }),
+      ],
+    })
+    expect(d.timeline.find((i) => i.sourceId === 't')).toBeUndefined()
+  })
+})

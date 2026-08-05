@@ -32,6 +32,22 @@ export function duration(interval: Interval): Minutes {
 }
 
 /**
+ * 開始分 `start`（当日00:00起点）と、当日00:00起点の絶対終了分 `absoluteEnd` から、
+ * 当日と翌日の区間へ分割する。日をまたぐ固定予定・睡眠などの占有・表示を、
+ * 単日スケジューリングで扱うために使う。
+ * - `absoluteEnd <= 1440`（日をまたがない）→ 当日 [start, absoluteEnd)・翌日なし。
+ * - `absoluteEnd > 1440`（日をまたぐ）→ 当日 [start, 1440)・翌日 [0, absoluteEnd-1440)。
+ */
+export function splitAtMidnight(
+  start: Minutes,
+  absoluteEnd: Minutes,
+): { today: Interval; tomorrow: Interval | null } {
+  const DAY = 24 * 60
+  if (absoluteEnd <= DAY) return { today: { start, end: absoluteEnd }, tomorrow: null }
+  return { today: { start, end: DAY }, tomorrow: { start: 0, end: absoluteEnd - DAY } }
+}
+
+/**
  * `HH:mm`〜`HH:mm` の時刻範囲を、その日の分数区間へ変換する（§5.2 実行可能時間帯）。
  * 終了が開始より後なら単一区間 [start, end)。
  * 終了が開始以下（日をまたぐ, 例 22:00〜02:00）なら、同日内の夜間 [start, 24:00) と

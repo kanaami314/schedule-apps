@@ -138,12 +138,13 @@ function FixedEventForm({ editing, onDone }: EditFormProps) {
   }, [target])
 
   const needsWeekdays = repeatKind === 'weekly' || repeatKind === 'biweekly'
+  // 開始 > 終了 は日をまたぐ予定（例 23:00〜01:00）として許可。同時刻のみ無効。
   const canSubmit =
     name.trim() !== '' &&
     date !== '' &&
     start !== '' &&
     end !== '' &&
-    start < end &&
+    start !== end &&
     (!needsWeekdays || weekdays.length > 0)
 
   function reset() {
@@ -261,6 +262,11 @@ function FixedEventForm({ editing, onDone }: EditFormProps) {
             />
           </div>
         </div>
+        {start > end && end !== '' && (
+          <p className="text-[11px] text-amber-600 dark:text-amber-400">
+            日をまたぐ予定として登録します（翌日 {end} まで）。
+          </p>
+        )}
         <CategorySelect value={categoryId} onChange={setCategoryId} />
 
         <Collapsible title="詳細設定" open={detailsOpen} onToggle={() => setDetailsOpen((v) => !v)}>

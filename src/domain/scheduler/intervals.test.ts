@@ -4,12 +4,29 @@ import {
   freeGaps,
   mergeIntervals,
   overlaps,
+  splitAtMidnight,
   timeRangeToIntervals,
   totalDuration,
   type Interval,
 } from './intervals'
 
 const iv = (start: number, end: number): Interval => ({ start, end })
+
+describe('splitAtMidnight（日またぎ分割）', () => {
+  it('日をまたがない場合は当日のみ', () => {
+    expect(splitAtMidnight(540, 720)).toEqual({ today: { start: 540, end: 720 }, tomorrow: null })
+  })
+  it('丁度24:00で終わる場合は当日のみ', () => {
+    expect(splitAtMidnight(1380, 1440)).toEqual({ today: { start: 1380, end: 1440 }, tomorrow: null })
+  })
+  it('日をまたぐ場合は当日[start,1440)と翌日[0,余り)', () => {
+    // 23:00開始 + 3時間 = 翌02:00
+    expect(splitAtMidnight(1380, 1380 + 180)).toEqual({
+      today: { start: 1380, end: 1440 },
+      tomorrow: { start: 0, end: 120 },
+    })
+  })
+})
 
 describe('timeRangeToIntervals（日またぎ対応）', () => {
   it('通常の範囲は単一区間', () => {

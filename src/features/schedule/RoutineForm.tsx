@@ -54,7 +54,8 @@ export function RoutineForm({ editing, onDone }: RoutineFormProps) {
     )
   }, [target])
 
-  const canSubmit = occurrences.every((o) => o.start < o.end && o.requiredTime > 0)
+  // 開始 > 終了 は日をまたぐ実行可能時間帯（例 睡眠 23:00〜07:00）として許可。同時刻のみ無効。
+  const canSubmit = occurrences.every((o) => o.start !== o.end && o.requiredTime > 0)
 
   function updateOcc(index: number, patch: Partial<OccurrenceInput>) {
     setOccurrences((prev) => prev.map((o, i) => (i === index ? { ...o, ...patch } : o)))
@@ -117,7 +118,7 @@ export function RoutineForm({ editing, onDone }: RoutineFormProps) {
         </div>
 
         <div>
-          <p className={`${labelClass} mb-1`}>各回（実行可能時間帯・必要時間）</p>
+          <p className={`${labelClass} mb-1`}>各回（実行可能時間帯・必要時間／日をまたぐ設定も可）</p>
           <div className="space-y-1">
             {occurrences.map((occ, i) => (
               <div key={i} className="flex items-center gap-1">

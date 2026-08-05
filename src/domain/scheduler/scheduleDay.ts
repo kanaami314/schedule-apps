@@ -26,7 +26,14 @@ import { resolveLoad } from '../load/inheritance'
 import type { LoadSegment } from '../load/continuous'
 import type { RecoveryIntervalType } from '../load/recovery'
 import { insertBreaks, type TimelineEntry } from './breakInsertion'
-import { duration, freeGaps, timeRangeToIntervals, timeToMinutes, type Interval } from './intervals'
+import {
+  duration,
+  freeGaps,
+  splitAtMidnight,
+  timeRangeToIntervals,
+  timeToMinutes,
+  type Interval,
+} from './intervals'
 import { intersectIntervals, placeFlexibleTasks, type PlacedItem, type Unplaced } from './placement'
 import { orderFlexibleTasks } from './taskOrder'
 import { occursOn } from './repeat'
@@ -86,49 +93,75 @@ function weekdayOf(date: IsoDate): Weekday {
   return new Date(`${date}T00:00`).getDay() as Weekday
 }
 
+/** IsoDate に日数を加減した IsoDate を返す。 */
+function addDaysIso(date: IsoDate, days: number): IsoDate {
+  const d = new Date(`${date}T00:00`)
+  d.setDate(d.getDate() + days)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+}
+
 /** 兼用可でない付随時間の分数（兼用可・未設定は0）。 */
 function reserved(ancillary: AncillaryTime | undefined): Minutes {
   return ancillary && !ancillary.shareable ? ancillary.duration : 0
 }
 
 /**
- * 固定予定の占有区間（§4.4）。予定本体の前に「移動＋準備」、後に「終了後の余裕」を
- * 兼用不可のぶんだけ確保する。兼用可(shareable)の付随時間は占有に加えない。
- * 表示上の予定枠は本体時間のままとし、この占有は他予定の配置衝突判定にのみ使う。
+ * 生活ルーチンの各回を実行可能時間帯へ配置する（§7）。配置できた区間の配列を返す。
+ *
+ * 各回の実行可能時間帯（allowedRange）が日をまたぐ場合（例 睡眠 23:00〜07:00）は、
+ * 開始時刻に必要時間ぶんを置き、当日分（夜間）と翌日分（早朝）に分割して占有・表示する。
+ * 翌日の早朝分は、前日に有効なルーチンとして当日のスケジュールにも現れる（`prevWeekday`）。
  */
-function occupancyInterval(fixed: FixedEvent, base: Interval): Interval {
-  const before = reserved(fixed.travelTime) + reserved(fixed.prepTime)
-  const after = reserved(fixed.bufferTime)
-  return { start: base.start - before, end: base.end + after }
-}
-
-/** 生活ルーチンの各回を実行可能時間帯へ配置する（§7）。配置できた区間の配列を返す。 */
 function placeRoutines(
   routines: readonly LifeRoutine[],
   window: Interval,
   weekday: Weekday,
+  prevWeekday: Weekday,
   busy: Interval[],
 ): PlacedItem[] {
   const placements: PlacedItem[] = []
+  const add = (id: string, routine: LifeRoutine, interval: Interval) => {
+    placements.push({
+      id,
+      sourceId: routine.id,
+      kind: 'routine',
+      interval,
+      movable: false,
+      label: routine.name ?? routine.routineType,
+    })
+    busy.push(interval)
+  }
   for (const routine of routines) {
-    if (routine.activeWeekdays && !routine.activeWeekdays.includes(weekday)) continue
+    const activeToday = !routine.activeWeekdays || routine.activeWeekdays.includes(weekday)
+    const activePrev = !routine.activeWeekdays || routine.activeWeekdays.includes(prevWeekday)
+    if (!activeToday && !activePrev) continue
     routine.occurrences.forEach((occ, index) => {
-      const allowed: Interval = {
-        start: Math.max(timeToMinutes(occ.allowedRange.start), window.start),
-        end: Math.min(timeToMinutes(occ.allowedRange.end), window.end),
+      const start = timeToMinutes(occ.allowedRange.start)
+      const end = timeToMinutes(occ.allowedRange.end)
+      const overnight = end <= start // 日をまたぐ実行可能時間帯（例 23:00〜07:00）。
+
+      if (!overnight) {
+        // 従来どおり: 窓内の空きに必要時間を前詰め配置（当日有効な場合のみ）。
+        if (!activeToday) return
+        const allowed: Interval = {
+          start: Math.max(start, window.start),
+          end: Math.min(end, window.end),
+        }
+        const gap = freeGaps(allowed, busy).find((g) => duration(g) >= occ.requiredTime)
+        if (!gap) return // 必要時間を確保できなければ配置しない（§7）。
+        add(`${routine.id}#${index}`, routine, { start: gap.start, end: gap.start + occ.requiredTime })
+        return
       }
-      const gap = freeGaps(allowed, busy).find((g) => duration(g) >= occ.requiredTime)
-      if (!gap) return // 必要時間を確保できなければ配置しない（§7）。
-      const interval: Interval = { start: gap.start, end: gap.start + occ.requiredTime }
-      placements.push({
-        id: `${routine.id}#${index}`,
-        sourceId: routine.id,
-        kind: 'routine',
-        interval,
-        movable: false,
-        label: routine.name ?? routine.routineType,
-      })
-      busy.push(interval)
+
+      // 日またぎ: 開始時刻から必要時間ぶんを置く（睡眠等は固定的に開始）。窓に入らなければ配置しない。
+      const windowLen = end + 24 * 60 - start
+      if (occ.requiredTime > windowLen) return
+      const { today, tomorrow } = splitAtMidnight(start, start + occ.requiredTime)
+      // 当日有効 → 夜間（開始側）を当日に配置。
+      if (activeToday) add(`${routine.id}#${index}`, routine, today)
+      // 前日有効かつ翌日にまたぐ → 早朝（尾）を当日に配置。
+      if (activePrev && tomorrow) add(`${routine.id}#${index}#am`, routine, tomorrow)
     })
   }
   return placements
@@ -139,34 +172,53 @@ export function scheduleDay(options: ScheduleDayOptions): ScheduleDayResult {
   const window = options.window ?? FULL_DAY
   const referenceTime = options.referenceTime ?? `${options.date}T00:00`
   const weekday = weekdayOf(options.date)
+  const prevDate = addDaysIso(options.date, -1)
+  const prevWeekday = weekdayOf(prevDate)
   // 過去日には新規の作業（柔軟タスク・自由活動）を自動配置しない（実在の固定・ルーチンは表示する）。
   const excludePast = options.notBefore !== undefined && options.date < options.notBefore
 
-  // 1. 固定予定（対象日に出現するもの）を占有として確定。繰り返しは基準日から展開（§4.3）。
-  const fixedDefs: FixedEvent[] = options.definitions.filter(
-    (d): d is FixedEvent => d.kind === 'fixed' && occursOn(d.date, d.repeat, options.date),
-  )
-  const fixedPlacements: PlacedItem[] = fixedDefs.map((fixed) => ({
-    id: fixed.id,
-    sourceId: fixed.id,
-    kind: 'fixed' as const,
-    interval: { start: timeToMinutes(fixed.time.start), end: timeToMinutes(fixed.time.end) },
-    movable: false,
-    load: resolveLoad(fixed.load, fixed.categoryId, options.categories),
-    categoryId: fixed.categoryId,
-    label: fixed.name,
-  }))
-
-  // 他予定の配置には、付随時間（準備・移動・終了後余裕）を含む占有区間を使う（§4.4）。
-  const busy: Interval[] = fixedDefs.map((fixed, i) =>
-    occupancyInterval(fixed, fixedPlacements[i].interval),
-  )
+  // 1. 固定予定を占有として確定。繰り返しは基準日から展開（§4.3）。
+  //    時刻が日をまたぐ固定予定（終了 <= 開始, 例 23:00〜01:00）は、当日分（夜間）と
+  //    翌日分（早朝）に分割する。前日に出現し日をまたぐものは、当日の早朝分として現れる。
+  const fixedPlacements: PlacedItem[] = []
+  const busy: Interval[] = []
+  const allFixed = options.definitions.filter((d): d is FixedEvent => d.kind === 'fixed')
+  for (const fixed of allFixed) {
+    const start = timeToMinutes(fixed.time.start)
+    const end = timeToMinutes(fixed.time.end)
+    if (start === end) continue // 幅0は無効。
+    const absEnd = end > start ? end : end + 24 * 60 // 日またぎは翌日として絶対分数化。
+    const before = reserved(fixed.travelTime) + reserved(fixed.prepTime)
+    const after = reserved(fixed.bufferTime)
+    const push = (idSuffix: string, interval: Interval, occupancy: Interval) => {
+      fixedPlacements.push({
+        id: `${fixed.id}${idSuffix}`,
+        sourceId: fixed.id,
+        kind: 'fixed',
+        interval,
+        movable: false,
+        load: resolveLoad(fixed.load, fixed.categoryId, options.categories),
+        categoryId: fixed.categoryId,
+        label: fixed.name,
+      })
+      busy.push(occupancy)
+    }
+    const { today, tomorrow } = splitAtMidnight(start, absEnd)
+    // 対象日に出現する分（開始側を含む）。付随の「前」は開始側、日をまたがなければ「後」も当日。
+    if (occursOn(fixed.date, fixed.repeat, options.date)) {
+      push('', today, { start: today.start - before, end: tomorrow ? today.end : today.end + after })
+    }
+    // 前日に出現し日をまたいで当日にかかる分（早朝の尾）。付随の「後」はこちら側。
+    if (tomorrow && occursOn(fixed.date, fixed.repeat, prevDate)) {
+      push('#am', tomorrow, { start: 0, end: tomorrow.end + after })
+    }
+  }
 
   // 2. 生活ルーチンを配置（固定の次に優先, §3）。busy を更新する。
   const routines = options.definitions.filter(
     (d): d is LifeRoutine => d.kind === 'routine',
   )
-  const routinePlacements = placeRoutines(routines, window, weekday, busy)
+  const routinePlacements = placeRoutines(routines, window, weekday, prevWeekday, busy)
 
   // 3. 柔軟なタスクを整列して残りの空きへ貪欲配置。
   //    開始可能日・実行可能曜日(§5.2)を満たすタスクのみ、この日の配置対象にする。
