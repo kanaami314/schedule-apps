@@ -12,6 +12,8 @@ import { GoalProjectManager } from './features/schedule/GoalProjectManager'
 import { NotificationCenter } from './features/schedule/NotificationCenter'
 import { TagManager } from './features/schedule/TagManager'
 import { Modal } from './features/schedule/Modal'
+import { useAuthStore } from './store/authStore'
+import { LoginScreen } from './features/auth/LoginScreen'
 
 /** 選択中タブの永続化キー。 */
 const TAB_KEY = 'schedule-app.activeTab'
@@ -69,17 +71,30 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 
 function App() {
   const init = useAppStore((s) => s.init)
+  const reset = useAppStore((s) => s.reset)
   const loaded = useAppStore((s) => s.loaded)
   const minimalMode = useAppStore((s) => s.minimalMode)
   const setMinimalMode = useAppStore((s) => s.setMinimalMode)
+
+  const authInit = useAuthStore((s) => s.init)
+  const session = useAuthStore((s) => s.session)
+  const authReady = useAuthStore((s) => s.ready)
+  const signOut = useAuthStore((s) => s.signOut)
 
   const [tab, setTab] = useState<TabKey>(loadTab)
   // 予定作成モーダル（§7: スケジュール表示中に前面表示）。
   const [createOpen, setCreateOpen] = useState(false)
 
+  // 起動時にセッション監視を開始。
   useEffect(() => {
-    void init()
-  }, [init])
+    authInit()
+  }, [authInit])
+
+  // ログイン中はそのアカウントのデータを読み込み、ログアウトで破棄する。
+  useEffect(() => {
+    if (session) void init()
+    else reset()
+  }, [session, init, reset])
 
   function selectTab(next: TabKey) {
     setTab(next)
@@ -98,6 +113,19 @@ function App() {
     { key: 'settings', label: '分類・設定' },
   ]
 
+  // セッション判定中は最小限の表示（見出しは担保）。
+  if (!authReady) {
+    return (
+      <div className="mx-auto max-w-4xl p-6">
+        <h1 className="sr-only">くるリズム</h1>
+        <p className="text-sm text-gray-500">読み込み中…</p>
+      </div>
+    )
+  }
+
+  // 未ログインはログイン画面。
+  if (!session) return <LoginScreen />
+
   return (
     <div className="mx-auto max-w-4xl p-4 sm:p-6">
       <ScheduleToast />
@@ -109,14 +137,22 @@ function App() {
           alt="くるリズム 暮らしに合わせる自動スケジューラ"
           className="h-14 w-auto max-w-full sm:h-16"
         />
-        <label className="flex shrink-0 items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
-          <input
-            type="checkbox"
-            checked={minimalMode}
-            onChange={(e) => setMinimalMode(e.target.checked)}
-          />
-          最低限モード
-        </label>
+        <div className="flex shrink-0 flex-col items-end gap-1.5">
+          <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+            <input
+              type="checkbox"
+              checked={minimalMode}
+              onChange={(e) => setMinimalMode(e.target.checked)}
+            />
+            最低限モード
+          </label>
+          <button
+            onClick={() => void signOut()}
+            className="text-xs text-gray-500 hover:text-gray-700 hover:underline"
+          >
+            ログアウト
+          </button>
+        </div>
       </header>
 
       {loaded ? (

@@ -18,11 +18,61 @@ import type {
   WishlistItem,
 } from '../domain/types'
 import { createDexieRepository, type AppRepository } from '../data'
+import { createSupabaseRepository } from '../data/supabaseRepository'
+import { supabase } from '../lib/supabase'
 
-const repository: AppRepository = createDexieRepository()
+// サーバー主導: ログイン中のセッションで RLS が効く Supabase リポジトリを使う。
+const repository: AppRepository = createSupabaseRepository(supabase)
 
-/** init の重複実行を防ぐ（StrictMode の二重呼び出し対策）。 */
+/** init の重複実行を防ぐ（StrictMode の二重呼び出し対策）。ログアウトで null に戻す。 */
 let initPromise: Promise<void> | null = null
+
+/** 初回ログイン時のローカル取り込み済みフラグ（アカウント単位, localStorage）。 */
+const LOCAL_IMPORT_FLAG_PREFIX = 'schedule-app.localImported.'
+
+/** 全コレクションをまとめて読み込む。 */
+async function loadAll(repo: AppRepository) {
+  const [categories, definitions, records, reflections, wishlist, goals, projects, tags] =
+    await Promise.all([
+      repo.categories.all(),
+      repo.definitions.all(),
+      repo.records.all(),
+      repo.reflections.all(),
+      repo.wishlist.all(),
+      repo.goals.all(),
+      repo.projects.all(),
+      repo.tags.all(),
+    ])
+  return { categories, definitions, records, reflections, wishlist, goals, projects, tags }
+}
+
+/**
+ * ローカル(IndexedDB)の既存データを、ログイン中アカウントのクラウドへ取り込む。
+ * 何か1件でも取り込んだら true。既存 id は upsert で上書き（ローカル優先）。
+ */
+async function importLocalData(): Promise<boolean> {
+  const local = createDexieRepository()
+  const d = await loadAll(local)
+  const total =
+    d.categories.length +
+    d.definitions.length +
+    d.records.length +
+    d.reflections.length +
+    d.wishlist.length +
+    d.goals.length +
+    d.projects.length +
+    d.tags.length
+  if (total === 0) return false
+  await repository.categories.bulkPut(d.categories)
+  await repository.definitions.bulkPut(d.definitions)
+  await repository.records.bulkPut(d.records)
+  await repository.reflections.bulkPut(d.reflections)
+  await repository.wishlist.bulkPut(d.wishlist)
+  await repository.goals.bulkPut(d.goals)
+  await repository.projects.bulkPut(d.projects)
+  await repository.tags.bulkPut(d.tags)
+  return true
+}
 
 /** 最低限モード（§23）の永続化キー。テーブルではなく localStorage に保持する。 */
 const MINIMAL_MODE_KEY = 'schedule-app.minimalMode'
@@ -139,6 +189,8 @@ interface AppState {
 
   /** 永続化層から全データを読み込む（初回は初期カテゴリを投入）。 */
   init(): Promise<void>
+  /** ログアウト時に、読み込み済みデータを破棄して未初期化状態に戻す。 */
+  reset(): void
   /** 最低限モードを切り替える（localStorage に保持）。 */
   setMinimalMode(value: boolean): void
   /** 起動中の通知の有効/無効を切り替える（localStorage に保持）。 */
@@ -235,36 +287,57 @@ export const useAppStore = create<AppState>((set, get) => ({
     // 重複呼び出しは同じ Promise を返し、二重投入を防ぐ。
     if (initPromise) return initPromise
     initPromise = (async () => {
-      const [loadedCategories, definitions, records, reflections, wishlist, goals, projects, tags] =
-        await Promise.all([
-          repository.categories.all(),
-          repository.definitions.all(),
-          repository.records.all(),
-          repository.reflections.all(),
-          repository.wishlist.all(),
-          repository.goals.all(),
-          repository.projects.all(),
-          repository.tags.all(),
-        ])
-      // 初回のみ初期カテゴリを投入する（§8.1）。ID固定なので冪等。
-      let categories = loadedCategories
+      // 1. クラウド（このアカウント）から読み込む。
+      let data = await loadAll(repository)
+
+      // 2. 初回ログインなら、この端末のローカル(IndexedDB)データを取り込む（アカウント単位で1回だけ）。
+      const uid = (await supabase.auth.getSession()).data.session?.user?.id
+      const flagKey = uid ? `${LOCAL_IMPORT_FLAG_PREFIX}${uid}` : null
+      if (flagKey) {
+        let alreadyImported = true
+        try {
+          alreadyImported = localStorage.getItem(flagKey) === '1'
+        } catch {
+          alreadyImported = true // localStorage 不可なら取り込みは行わない。
+        }
+        if (!alreadyImported) {
+          try {
+            if (await importLocalData()) data = await loadAll(repository) // 取り込んだら再読込。
+          } catch {
+            // 取り込み失敗は致命的ではない。通常起動を続ける。
+          }
+          try {
+            localStorage.setItem(flagKey, '1')
+          } catch {
+            // ignore
+          }
+        }
+      }
+
+      // 3. まだカテゴリが無ければ初期カテゴリを投入する（§8.1）。ID固定なので冪等。
+      let categories = data.categories
       if (categories.length === 0) {
         categories = buildDefaultCategories()
         await repository.categories.bulkPut(categories)
       }
-      set({
-        categories,
-        definitions,
-        records,
-        reflections,
-        wishlist,
-        goals,
-        projects,
-        tags,
-        loaded: true,
-      })
+      set({ ...data, categories, loaded: true })
     })()
     return initPromise
+  },
+
+  reset() {
+    initPromise = null
+    set({
+      loaded: false,
+      categories: [],
+      definitions: [],
+      records: [],
+      reflections: [],
+      wishlist: [],
+      goals: [],
+      projects: [],
+      tags: [],
+    })
   },
 
   async saveDefinition(def) {
